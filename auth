@@ -1,0 +1,50 @@
+package auth
+
+import (
+	"context"
+	"testing"
+
+	"github.com/dgrijalva/jwt-go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+)
+
+var hmacSampleSecret = "fake_signing_secret"
+
+func tokenCtx(ctx context.Context, key string) context.Context {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"foo": "bar",
+	})
+
+	// Sign and get the complete encoded token as a string using the secret
+	// Ignore the error, it will fail the test anyways if it is not nil.
+	tokenString, _ := token.SignedString(key)
+	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+		"Authentication": "Bearer " + tokenString,
+	}))
+	return ctx
+}
+
+func TestAuthInterceptor(t *testing.T) {
+	ctx := context.Background()
+	var authTests = []struct {
+		ctx  context.Context
+		code codes.Code
+	}{
+		{ctx, codes.Unauthenticated},
+		{metadata.NewIncomingContext(ctx, metadata.New(nil)), codes.Unauthenticated},
+		{tokenCtx(ctx, "bad_signing_key"), codes.Unauthenticated},
+		{tokenCtx(ctx, hmacSampleSecret), codes.OK},
+	}
+
+	a := &authClient{publicKey: hmacSampleSecret}
+
+	for _, test := range authTests {
+		_, err := a.AuthInterceptor(test.ctx, nil, &grpc.UnaryServerInfo{}, nil)
+		if status.Code(err) != test.code {
+			t.Error("expected: %v, got: %v", test.code, status.Code(err))
+		}
+	}
+}
