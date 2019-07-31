@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
@@ -45,6 +46,7 @@ func NewRSAAuthClient(keyFile string) (*authClient, error) {
 }
 
 func (a *authClient) AuthInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+
 	tknStr, ok := getToken(ctx)
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "missing token")
@@ -65,11 +67,13 @@ func getToken(ctx context.Context) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	authHeader := headers.Get("authorization")
-	if len(authHeader) == 0 {
+	authHeader, ok := headers["authorization"]
+	if !ok {
 		return "", false
 	}
-
-	// Remove Bearer before returning.
-	return strings.TrimPrefix(authHeader[0], "Bearer "), true
+	token := authHeader[0]
+	// Remove Bearer
+	tokenParts := strings.Split(token, "Bearer ")
+	token = tokenParts[len(tokenParts)-1]
+	return token, true
 }
