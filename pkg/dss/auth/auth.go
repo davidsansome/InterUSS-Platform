@@ -7,7 +7,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
@@ -67,13 +66,9 @@ func getToken(ctx context.Context) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	authHeader, ok := headers["authorization"]
-	if !ok {
-		return "", false
-	}
+	authHeader := headers.Get("authorization")
 	token := authHeader[0]
 	// Remove Bearer
 	tokenParts := strings.Split(token, "Bearer ")
-	token = tokenParts[len(tokenParts)-1]
-	return token, true
+	return tokenParts[len(tokenParts)-1], true
 }
