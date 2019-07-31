@@ -13,14 +13,21 @@ import (
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"github.com/steeling/InterUSS-Platform/pkg/logging"
+
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"go.uber.org/zap"
 
 	"google.golang.org/grpc"
 )
 
 var (
-	address = flag.String("addr", "127.0.0.1:8080", "address")
-	pkFile  = flag.String("public_key_file", "", "Path to public Key to use for JWT decoding.")
+	address      = flag.String("addr", "127.0.0.1:8080", "address")
+	pkFile       = flag.String("public_key_file", "", "Path to public Key to use for JWT decoding.")
+	address      = flag.String("addr", "127.0.0.1:8080", "address")
+	grpc_backend = flag.String("grpc-backend", "", "Endpoint for grpc backend. Only to be set if run in proxy mode")
+	mode         = flag.String("mode", "undefined", "One of [backend, proxy].")
+	pkFile       = flag.String("public_key_file", "", "Path to public Key to use for JWT decoding.")
 )
 
 // RunGRPCServer starts the example gRPC service.
