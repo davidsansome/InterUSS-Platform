@@ -1,0 +1,26 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: http-gateway
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: http-gateway
+    spec:
+      serviceAccountName: cockroachdb
+      volumes:
+      - name: client-certs
+        secret:
+          secretName: cockroachdb.client.root
+          defaultMode: 256
+      containers:
+      - name: http-gateway
+        image: cockroachdb/loadgen-kv:0.1
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+        command:
+          - "go run ./main.go  -grpc-backend=grpc-backend.REPLACE_NAMESPACE -port=8081 -public_key_file=/cockroach-certs/cockroachdb.client.root"

@@ -67,6 +67,9 @@ func getToken(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	authHeader := headers.Get("authorization")
+	if len(authHeader) == 0 {
+		return "", false
+	}
 	token := authHeader[0]
 	// Remove Bearer
 	tokenParts := strings.Split(token, "Bearer ")

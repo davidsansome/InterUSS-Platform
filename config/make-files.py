@@ -103,6 +103,11 @@ for cr in create_clusters:
   with open(yaml_file, 'w') as f:
     check_call(['sed', 's/JOINLIST/%s/g;s/LOCALITYLIST/%s/g;s/PUBLIC_ADDR/%s/g' % (cr.join_str(), locality, cr.lb_ip), 'templates/cockroachdb-statefulset-secure.yaml'], stdout=f)
 
+for cr in create_clusters:
+  yaml_file = '%s/http-gateway.yaml' % (cr.directory)
+  with open(yaml_file, 'w') as f:
+    check_call(['sed', 's/REPLACE_NAMESPACE/%s/g' % (cr.zone), 'templates/http-gateway.yaml'], stdout=f)
+
 # Copy the setup script into each directory.
 cluster_init = 'true'
 for cr in create_clusters:
