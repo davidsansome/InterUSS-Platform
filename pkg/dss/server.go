@@ -40,7 +40,7 @@ func (s *Server) DeleteSubscription(ctx context.Context, req *dspb.DeleteSubscri
 	}
 	return &dspb.DeleteSubscriptionResponse{
 		Subscription: subscription,
-	}, err
+	}, nil
 }
 
 func (s *Server) SearchIdentificationServiceAreas(ctx context.Context, req *dspb.SearchIdentificationServiceAreasRequest) (*dspb.SearchIdentificationServiceAreasResponse, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
@@ -12,13 +13,30 @@ import (
 	"go.uber.org/multierr"
 )
 
+// nullTime models a timestamp that could be NULL in the database. The model and
+// implementation follows prior art as in sql.Null* types.
+//
+// Please note that this is rather driver-specific. The postgres sql driver
+// errors out when trying to Scan a time.Time from a nil value. Other drivers
+// might behave differently.
 type nullTime struct {
 	Time  time.Time
-	Valid bool
+	Valid bool // Valid indicates whether Time carries a non-NULL value.
 }
 
 func (nt *nullTime) Scan(value interface{}) error {
-	nt.Time, nt.Valid = value.(time.Time)
+	if value == nil {
+		nt.Time = time.Time{}
+		nt.Valid = false
+		return nil
+	}
+
+	t, ok := value.(time.Time)
+	if !ok {
+		return fmt.Errorf("failed to cast database value, expected time.Time, got %T", value)
+	}
+	nt.Time, nt.Valid = t, ok
+
 	return nil
 }
 
@@ -30,13 +48,15 @@ func (nt nullTime) Value() (driver.Value, error) {
 }
 
 type subscriptionsRow struct {
-	id          string
-	owner       string
-	url         string
-	typesFilter sql.NullString
-	beginsAt    nullTime
-	expiresAt   nullTime
-	updatedAt   time.Time
+	id                string
+	owner             string
+	url               string
+	typesFilter       sql.NullString
+	notificationIndex int32
+	lastUsedAt        nullTime
+	beginsAt          nullTime
+	expiresAt         nullTime
+	updatedAt         time.Time
 }
 
 func (sr *subscriptionsRow) scan(row *sql.Row) error {
@@ -44,24 +64,11 @@ func (sr *subscriptionsRow) scan(row *sql.Row) error {
 		&sr.owner,
 		&sr.url,
 		&sr.typesFilter,
+		&sr.notificationIndex,
+		&sr.lastUsedAt,
 		&sr.beginsAt,
 		&sr.expiresAt,
 		&sr.updatedAt,
-	)
-}
-
-type subscriptionsStatusRow struct {
-	subscriptionID    string
-	notificationIndex int64
-	lastUsedAt        nullTime
-	updatedAt         time.Time
-}
-
-func (ssr *subscriptionsStatusRow) scan(row *sql.Row) error {
-	return row.Scan(
-		&ssr.subscriptionID,
-		&ssr.notificationIndex,
-		&ssr.lastUsedAt,
 	)
 }
 
@@ -84,26 +91,20 @@ func (s *Store) Close() error {
 // validating timestamps of last updates.
 func (s *Store) insertSubscriptionUnchecked(ctx context.Context, subscription *dspb.Subscription) (*dspb.Subscription, error) {
 	const (
-		subscriptionStatusQuery = `
-		INSERT INTO
-			subscriptions_status
-		VALUES
-			($1, $2, $3)
-		RETURNING
-			*
-		`
 		subscriptionQuery = `
 		INSERT INTO
 			subscriptions
 		VALUES
-			(gen_random_uuid(), $1, $2, $3, $4, $5, transaction_timestamp())
+			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())
 		RETURNING
 			*`
 	)
 
 	sr := subscriptionsRow{
-		owner: subscription.GetOwner(),
-		url:   subscription.Callbacks.GetIdentificationServiceAreaUrl(),
+		id:                subscription.GetId(),
+		owner:             subscription.GetOwner(),
+		url:               subscription.Callbacks.GetIdentificationServiceAreaUrl(),
+		notificationIndex: subscription.GetNotificationIndex(),
 	}
 
 	if ts := subscription.GetBegins(); ts != nil {
@@ -132,26 +133,14 @@ func (s *Store) insertSubscriptionUnchecked(ctx context.Context, subscription *d
 	if err := sr.scan(tx.QueryRowContext(
 		ctx,
 		subscriptionQuery,
+		sr.id,
 		sr.owner,
 		sr.url,
 		sr.typesFilter,
+		sr.notificationIndex,
+		sr.lastUsedAt,
 		sr.beginsAt,
 		sr.expiresAt,
-	)); err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-
-	ssr := subscriptionsStatusRow{
-		subscriptionID:    sr.id,
-		notificationIndex: int64(subscription.NotificationIndex),
-	}
-
-	if err := ssr.scan(tx.QueryRowContext(
-		ctx,
-		subscriptionStatusQuery,
-		ssr.subscriptionID,
-		ssr.notificationIndex,
-		ssr.lastUsedAt,
 	)); err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
@@ -162,7 +151,7 @@ func (s *Store) insertSubscriptionUnchecked(ctx context.Context, subscription *d
 		Callbacks: &dspb.SubscriptionCallbacks{
 			IdentificationServiceAreaUrl: sr.url,
 		},
-		NotificationIndex: int32(ssr.notificationIndex),
+		NotificationIndex: sr.notificationIndex,
 	}
 
 	if sr.beginsAt.Valid {
@@ -192,14 +181,6 @@ func (s *Store) insertSubscriptionUnchecked(ctx context.Context, subscription *d
 // returns the deleted subscription.
 func (s *Store) DeleteSubscription(ctx context.Context, id string) (*dspb.Subscription, error) {
 	const (
-		subscriptionStatusQuery = `
-		DELETE FROM
-			subscriptions_status
-		WHERE
-			subscription_id = $1
-		RETURNING
-			*
-		`
 		subscriptionQuery = `
 		DELETE FROM
 			subscriptions
@@ -214,12 +195,6 @@ func (s *Store) DeleteSubscription(ctx context.Context, id string) (*dspb.Subscr
 		return nil, err
 	}
 
-	ssr := subscriptionsStatusRow{}
-
-	if err := ssr.scan(tx.QueryRowContext(ctx, subscriptionStatusQuery, id)); err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-
 	sr := subscriptionsRow{}
 
 	if err := sr.scan(tx.QueryRowContext(ctx, subscriptionQuery, id)); err != nil {
@@ -232,7 +207,7 @@ func (s *Store) DeleteSubscription(ctx context.Context, id string) (*dspb.Subscr
 		Callbacks: &dspb.SubscriptionCallbacks{
 			IdentificationServiceAreaUrl: sr.url,
 		},
-		NotificationIndex: int32(ssr.notificationIndex),
+		NotificationIndex: int32(sr.notificationIndex),
 	}
 
 	if sr.beginsAt.Valid {
@@ -265,20 +240,18 @@ func (s *Store) DeleteSubscription(ctx context.Context, id string) (*dspb.Subscr
 func (s *Store) Bootstrap(ctx context.Context) error {
 	const query = `
 	CREATE TABLE IF NOT EXISTS subscriptions (
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		id UUID PRIMARY KEY,
 		owner STRING NOT NULL,
 		url STRING NOT NULL,
 		types_filter STRING,
+		notification_index INT4 DEFAULT 0,
+		last_used_at TIMESTAMPTZ,
 		begins_at TIMESTAMPTZ,
 		expires_at TIMESTAMPTZ,
 		updated_at TIMESTAMPTZ NOT NULL,
 		INDEX begins_at_idx (begins_at),
-		INDEX expires_at_idx (expires_at)
-	);
-	CREATE TABLE IF NOT EXISTS subscriptions_status (
-		subscription_id UUID NOT NULL REFERENCES subscriptions (id) ON DELETE CASCADE,
-		notification_index INT8 DEFAULT 0,
-		last_used_at TIMESTAMPTZ
+		INDEX expires_at_idx (expires_at),
+		CHECK (begins_at IS NULL OR expires_at IS NULL OR begins_at < expires_at)
 	);
 	CREATE TABLE IF NOT EXISTS cells_subscriptions (
 		cell_id INT64 NOT NULL,
@@ -290,14 +263,15 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 		INDEX subscription_id_idx (subscription_id)
 	);
 	CREATE TABLE IF NOT EXISTS identification_service_areas (
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		id UUID PRIMARY KEY,
 		owner STRING NOT NULL,
 		url STRING NOT NULL,
 		starts_at TIMESTAMPTZ NOT NULL,
 		ends_at TIMESTAMPTZ NOT NULL,
 		updated_at TIMESTAMPTZ NOT NULL,
 		INDEX starts_at_idx (starts_at),
-		INDEX ends_at_idx (ends_at)
+		INDEX ends_at_idx (ends_at),
+		CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at)
 	);
 	CREATE TABLE IF NOT EXISTS cells_identification_service_areas (
 		cell_id INT64 NOT NULL,
@@ -317,7 +291,6 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 // cleanUp drops all required tables from the store, useful for testing.
 func (s *Store) cleanUp(ctx context.Context) error {
 	const query = `
-	DROP TABLE IF EXISTS subscriptions_status;
 	DROP TABLE IF EXISTS cells_subscriptions;
 	DROP TABLE IF EXISTS subscriptions;
 	DROP TABLE IF EXISTS cells_identification_service_areas;

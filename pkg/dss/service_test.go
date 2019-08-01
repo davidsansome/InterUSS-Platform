@@ -42,20 +42,21 @@ func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
 			err:  errors.New("failed to look up subscription for ID"),
 		},
 	} {
-		store := &mockStore{}
-		store.On("Close").Return(error(nil))
-		store.On("DeleteSubscription", mock.Anything, r.id).Return(
-			r.subscription, r.err,
-		)
+		t.Run(r.name, func(t *testing.T) {
+			store := &mockStore{}
+			store.On("DeleteSubscription", mock.Anything, r.id).Return(
+				r.subscription, r.err,
+			)
+			s := &Server{
+				Store: store,
+			}
 
-		s := &Server{
-			Store: store,
-		}
-
-		response, err := s.DeleteSubscription(context.Background(), &dspb.DeleteSubscriptionRequest{
-			Id: r.id,
+			response, err := s.DeleteSubscription(context.Background(), &dspb.DeleteSubscriptionRequest{
+				Id: r.id,
+			})
+			require.Equal(t, r.err, err)
+			require.EqualValues(t, r.subscription, response.GetSubscription())
+			require.True(t, store.AssertExpectations(t))
 		})
-		require.Equal(t, r.err, err)
-		require.EqualValues(t, r.subscription, response.GetSubscription())
 	}
 }
