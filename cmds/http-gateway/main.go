@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -17,13 +16,13 @@ import (
 )
 
 var (
-	port        = flag.Int("port", 8080, "port")
+	address     = flag.String("addr", "127.0.0.1:8080", "address")
 	grpcBackend = flag.String("grpc-backend", "", "Endpoint for grpc backend. Only to be set if run in proxy mode")
 )
 
 // RunHTTPProxy starts the HTTP proxy for the DSS gRPC service on ctx, listening
-// on port, proxying to endpoint.
-func RunHTTPProxy(ctx context.Context, port int, endpoint string) error {
+// on address, proxying to endpoint.
+func RunHTTPProxy(ctx context.Context, address, endpoint string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -42,7 +41,7 @@ func RunHTTPProxy(ctx context.Context, port int, endpoint string) error {
 	}
 
 	// Start HTTP server (and proxy calls to gRPC server endpoint)
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+	return http.ListenAndServe(address, mux)
 }
 
 func main() {
@@ -52,7 +51,7 @@ func main() {
 		logger = logging.WithValuesFromContext(ctx, logging.Logger)
 	)
 
-	if err := RunHTTPProxy(ctx, *port, *grpcBackend); err != nil {
+	if err := RunHTTPProxy(ctx, *address, *grpcBackend); err != nil {
 		logger.Panic("Failed to execute service", zap.Error(err))
 	}
 	logger.Info("Shutting down gracefully")

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -23,22 +22,22 @@ import (
 )
 
 var (
-	port   = flag.Int("port", 8081, "port")
-	pkFile = flag.String("public_key_file", "", "Path to public Key to use for JWT decoding.")
+	address = flag.String("addr", "127.0.0.1:8080", "address")
+	pkFile  = flag.String("public_key_file", "", "Path to public Key to use for JWT decoding.")
 )
 
 // RunGRPCServer starts the example gRPC service.
 // "network" and "address" are passed to net.Listen.
-func RunGRPCServer(ctx context.Context, port int) error {
+func RunGRPCServer(ctx context.Context, address string) error {
 	logger := logging.WithValuesFromContext(ctx, logging.Logger)
 
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	l, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			logger.Error("Failed to close listener", zap.Int("port", port), zap.Error(err))
+			logger.Error("Failed to close listener", zap.String("address", address), zap.Error(err))
 		}
 	}()
 
@@ -91,7 +90,7 @@ func main() {
 		logger = logging.WithValuesFromContext(ctx, logging.Logger)
 	)
 
-	if err := RunGRPCServer(ctx, *port); err != nil {
+	if err := RunGRPCServer(ctx, *address); err != nil {
 		logger.Panic("Failed to execute service", zap.Error(err))
 	}
 	logger.Info("Shutting down gracefully")

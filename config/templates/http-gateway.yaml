@@ -12,7 +12,7 @@ spec:
       containers:
       - name: http-gateway
         image: http-gateway:latest
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http

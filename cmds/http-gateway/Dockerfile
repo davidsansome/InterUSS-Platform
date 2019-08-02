@@ -1,22 +1,9 @@
-# From the root directory docker build -f cmds/http-gateway/Dockerfile -t http-gateway .
-
-# Start from the latest golang base image
-FROM golang:latest
-
-# Set the Current Working Directory inside the container
+FROM golang:latest AS build
+ADD . /app
 WORKDIR /app
-
-# Copy go mod and sum files
-COPY go.mod go.sum ./
-
-# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
+RUN make
 
-# Copy the source from the current directory to the Working Directory inside the container
-COPY . .
-
-# Build the Go app
-RUN go build -o main.go ./cmds/http-gateway/main.go
-
-# Expose port 8081 to the outside world
-EXPOSE 8081
+FROM alpine:latest
+COPY --from=build /go/bin/grpc-backend /usr/bin
+ENTRYPOINT ["/usr/bin/http-gateway"]
