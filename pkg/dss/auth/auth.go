@@ -70,8 +70,7 @@ func getToken(ctx context.Context) (string, bool) {
 	if len(authHeader) == 0 {
 		return "", false
 	}
-	token := authHeader[0]
-	// Remove Bearer
-	tokenParts := strings.Split(token, "Bearer ")
-	return tokenParts[len(tokenParts)-1], true
+
+	// Remove Bearer before returning.
+	return strings.TrimPrefix(authHeader[0], "Bearer "), true
 }
