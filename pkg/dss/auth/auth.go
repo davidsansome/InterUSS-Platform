@@ -12,6 +12,26 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var (
+	// ContextKeyOwner is the key to an owner value.
+	ContextKeyOwner ContextKey = "owner"
+)
+
+// ContextKey models auth-specific keys in a context.
+type ContextKey string
+
+// ContextWithOwner adds "owner" to "ctx".
+func ContextWithOwner(ctx context.Context, owner string) context.Context {
+	return context.WithValue(ctx, ContextKeyOwner, owner)
+}
+
+// OwnerFromContext returns the value for owner from "ctx" and a boolean
+// indicating whether a valid value was present or not.
+func OwnerFromContext(ctx context.Context) (string, bool) {
+	owner, ok := ctx.Value(ContextKeyOwner).(string)
+	return owner, ok
+}
+
 type authClient struct {
 	publicKey []byte
 }
@@ -31,13 +51,21 @@ func (a *authClient) AuthInterceptor(ctx context.Context, req interface{}, info 
 		return nil, status.Errorf(codes.Unauthenticated, "missing token")
 	}
 	// TODO(steeling): Modify to ParseWithClaims and inspect claims.
-	_, err := jwt.Parse(tknStr, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tknStr, func(token *jwt.Token) (interface{}, error) {
 		return a.publicKey, nil
 	})
-
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid token")
 	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "invalid token")
+	}
+	if clientID, ok := claims["client_id"].(string); ok {
+		ctx = ContextWithOwner(ctx, clientID)
+	}
+
 	return handler(ctx, req)
 }
 

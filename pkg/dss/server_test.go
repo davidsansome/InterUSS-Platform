@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/golang/geo/s2"
 	uuid "github.com/satori/go.uuid"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"github.com/steeling/InterUSS-Platform/pkg/logging"
@@ -28,6 +29,11 @@ func (ms *mockStore) GetSubscription(ctx context.Context, id string) (*dspb.Subs
 func (ms *mockStore) DeleteSubscription(ctx context.Context, id string) (*dspb.Subscription, error) {
 	args := ms.Called(ctx, id)
 	return args.Get(0).(*dspb.Subscription), args.Error(1)
+}
+
+func (ms *mockStore) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*dspb.Subscription, error) {
+	args := ms.Called(ctx, cells, owner)
+	return args.Get(0).([]*dspb.Subscription), args.Error(1)
 }
 
 func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
@@ -54,7 +60,8 @@ func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
 				r.subscription, r.err,
 			)
 			s := &Server{
-				DecorateLogging(logging.Logger, store),
+				Store:   DecorateLogging(logging.Logger, store),
+				Coverer: DefaultRegionCoverer,
 			}
 
 			response, err := s.DeleteSubscription(context.Background(), &dspb.DeleteSubscriptionRequest{
@@ -91,7 +98,8 @@ func TestGetSubscriptionCallsIntoMockStore(t *testing.T) {
 				r.subscription, r.err,
 			)
 			s := &Server{
-				Store: DecorateLogging(logging.Logger, store),
+				Store:   DecorateLogging(logging.Logger, store),
+				Coverer: DefaultRegionCoverer,
 			}
 
 			response, err := s.GetSubscription(context.Background(), &dspb.GetSubscriptionRequest{
