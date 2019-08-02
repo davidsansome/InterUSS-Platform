@@ -1,3 +1,5 @@
+# From the root directory docker build -f cmds/http-gateway/Dockerfile -t http-gateway .
+
 # Start from the latest golang base image
 FROM golang:latest
 
@@ -5,7 +7,7 @@ FROM golang:latest
 WORKDIR /app
 
 # Copy go mod and sum files
-COPY ../../go.mod ../../go.sum ./
+COPY go.mod go.sum ./
 
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
@@ -14,7 +16,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o main .
+RUN go build -o main.go ./cmds/http-gateway/main.go
 
-# Expose port 8080 to the outside world
-EXPOSE 8080
+# Expose port 8081 to the outside world
+EXPOSE 8081

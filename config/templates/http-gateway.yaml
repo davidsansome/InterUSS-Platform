@@ -3,24 +3,20 @@ kind: Deployment
 metadata:
   name: http-gateway
 spec:
-  replicas: 3
+  replicas: 1
   template:
     metadata:
       labels:
         app: http-gateway
     spec:
-      serviceAccountName: cockroachdb
-      volumes:
-      - name: client-certs
-        secret:
-          secretName: cockroachdb.client.root
-          defaultMode: 256
       containers:
       - name: http-gateway
-        image: cockroachdb/loadgen-kv:0.1
-        imagePullPolicy: IfNotPresent
-        volumeMounts:
-        - name: client-certs
-          mountPath: /cockroach-certs
+        image: http-gateway:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+          name: http
         command:
-          - "go run ./main.go  -grpc-backend=grpc-backend.REPLACE_NAMESPACE -port=8081 -public_key_file=/cockroach-certs/cockroachdb.client.root"
+          - "/bin/bash"
+          - "-ecx"
+          - "exec ./main.go  -grpc-backend=grpc-backend.YOUR_ZONE_NAME:TARGET_PORT -port=8080"
