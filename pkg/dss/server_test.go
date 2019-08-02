@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/geo/s2"
 	uuid "github.com/satori/go.uuid"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"github.com/steeling/InterUSS-Platform/pkg/logging"
 	"github.com/stretchr/testify/mock"
@@ -110,4 +111,84 @@ func TestGetSubscriptionCallsIntoMockStore(t *testing.T) {
 			require.True(t, store.AssertExpectations(t))
 		})
 	}
+}
+
+func TestSearchSubscriptionsFailsIfOwnerMissingFromContext(t *testing.T) {
+	var (
+		ctx = context.Background()
+		ms  = &mockStore{}
+		s   = &Server{
+			Store:   DecorateLogging(logging.Logger, &mockStore{}),
+			Coverer: DefaultRegionCoverer,
+			winding: windingCW,
+		}
+	)
+
+	_, err := s.SearchSubscriptions(ctx, &dspb.SearchSubscriptionsRequest{
+		Area: loop,
+	})
+
+	require.Error(t, err)
+	require.True(t, ms.AssertExpectations(t))
+}
+
+func TestSearchSubscriptionsFailsForInvalidArea(t *testing.T) {
+	var (
+		ctx = auth.ContextWithOwner(context.Background(), "foo")
+		ms  = &mockStore{}
+		s   = &Server{
+			Store:   DecorateLogging(logging.Logger, &mockStore{}),
+			Coverer: DefaultRegionCoverer,
+			winding: windingCW,
+		}
+	)
+
+	_, err := s.SearchSubscriptions(ctx, &dspb.SearchSubscriptionsRequest{
+		Area: loopWithOddNumberOfCoordinates,
+	})
+
+	require.Error(t, err)
+	require.True(t, ms.AssertExpectations(t))
+}
+
+func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
+	var (
+		ctx = auth.ContextWithOwner(context.Background(), "foo")
+		ms  = &mockStore{}
+		s   = &Server{
+			Store:   DecorateLogging(logging.Logger, ms),
+			Coverer: DefaultRegionCoverer,
+			winding: windingCW,
+		}
+	)
+
+	ms.On("SearchSubscriptions", mock.Anything, mock.Anything, "foo").Return(
+		[]*dspb.Subscription{
+			{
+				Id:    uuid.NewV4().String(),
+				Owner: "me-myself-and-i",
+				Callbacks: &dspb.SubscriptionCallbacks{
+					IdentificationServiceAreaUrl: "https://no/place/like/home",
+				},
+				NotificationIndex: 42,
+			},
+		}, error(nil),
+	)
+	resp, err := s.SearchSubscriptions(ctx, &dspb.SearchSubscriptionsRequest{
+		Area: loop,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Subscriptions, 1)
+	require.True(t, ms.AssertExpectations(t))
+}
+
+func TestDefaultRegionCovererProducesResults(t *testing.T) {
+	area, err := parseArea(loop, windingCW)
+	require.NoError(t, err)
+	require.NotNil(t, area)
+
+	cells := DefaultRegionCoverer.Covering(area)
+	require.NotNil(t, cells)
 }

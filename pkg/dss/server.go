@@ -25,8 +25,9 @@ var (
 	DefaultRegionCoverer = &s2.RegionCoverer{
 		MinLevel: DefaultMinimumCellLevel,
 		MaxLevel: DefaultMaximumCellLevel,
-		LevelMod: 1,
-		MaxCells: 6,
+		// TODO(tvoss): Fine-tune these values.
+		LevelMod: 3,
+		MaxCells: 10,
 	}
 )
 
@@ -92,6 +93,7 @@ func NewNilStore() Store {
 type Server struct {
 	Store   Store
 	Coverer *s2.RegionCoverer
+	winding winding
 }
 
 func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.DeleteIdentificationServiceAreaRequest) (*dspb.DeleteIdentificationServiceAreaResponse, error) {
@@ -118,14 +120,21 @@ func (s *Server) SearchIdentificationServiceAreas(ctx context.Context, req *dspb
 func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscriptionsRequest) (*dspb.SearchSubscriptionsResponse, error) {
 	owner, ok := auth.OwnerFromContext(ctx)
 	if !ok {
+		// TODO(tvoss): Revisit once error propagation strategy is defined. We
+		// might want to avoid leaking raw error messages to callers and instead
+		// just return a generic error indicating a request ID.
 		return nil, errors.New("missing owner from context")
 	}
 
-	loop, err := parseArea(req.GetArea())
+	loop, err := parseArea(req.GetArea(), s.winding)
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO(tvoss): We should agree on a maximum area covered by loop and error
+	// out if the threshold is exceeded. Otherwise, the next call will take
+	// a significant amount of time, and we have no way to interrupt it using a
+	// context.
 	cu := s.Coverer.Covering(loop)
 	subscriptions, err := s.Store.SearchSubscriptions(ctx, cu, owner)
 	if err != nil {

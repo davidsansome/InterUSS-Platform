@@ -10,6 +10,11 @@ import (
 	"github.com/golang/geo/s2"
 )
 
+const (
+	windingCCW winding = 0
+	windingCW  winding = 1
+)
+
 var (
 	errOddNumberOfCoordinatesInAreaString = errors.New("odd number of coordinates in area string")
 	errNotEnoughPointsInPolygon           = errors.New("not enough points in polygon")
@@ -31,9 +36,14 @@ func splitAtComma(data []byte, atEOF bool) (int, []byte, error) {
 	return 0, nil, nil
 }
 
+type winding int
+
 // parseArea parses "area" in the format 'lat0,lon0,lat1,lon1,...'
 // and returns the resulting Loop.
-func parseArea(area string) (*s2.Loop, error) {
+//
+// TODO(tvoss):
+//   * Agree and implement a maximum number of points in area
+func parseArea(area string, winding winding) (*s2.Loop, error) {
 	var (
 		lat, lng = float64(0), float64(0)
 		points   = []s2.Point{}
@@ -43,21 +53,27 @@ func parseArea(area string) (*s2.Loop, error) {
 	scanner.Split(splitAtComma)
 
 	for scanner.Scan() {
+		trimmed := strings.TrimSpace(scanner.Text())
 		switch counter % 2 {
 		case 0:
-			f, err := strconv.ParseFloat(scanner.Text(), 64)
+			f, err := strconv.ParseFloat(trimmed, 64)
 			if err != nil {
 				return nil, err
 			}
 			lat = f
 		case 1:
-			f, err := strconv.ParseFloat(scanner.Text(), 64)
+			f, err := strconv.ParseFloat(trimmed, 64)
 			if err != nil {
 				return nil, err
 			}
 			lng = f
 
-			points = append(points, s2.PointFromLatLng(s2.LatLngFromDegrees(lat, lng)))
+			switch winding {
+			case windingCCW:
+				points = append(points, s2.PointFromLatLng(s2.LatLngFromDegrees(lat, lng)))
+			case windingCW:
+				points = append([]s2.Point{s2.PointFromLatLng(s2.LatLngFromDegrees(lat, lng))}, points...)
+			}
 		}
 
 		counter++

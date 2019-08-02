@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -47,4 +48,14 @@ func TestAuthInterceptor(t *testing.T) {
 			t.Errorf("expected: %v, got: %v", test.code, status.Code(err))
 		}
 	}
+}
+
+func TestContextWithOwner(t *testing.T) {
+	ctx := context.Background()
+	owner, ok := OwnerFromContext(ctx)
+	require.False(t, ok)
+	ctx = ContextWithOwner(ctx, "me")
+	owner, ok = OwnerFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "me", owner)
 }
