@@ -1,10 +1,4 @@
-package dss
-
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-)
+package testdata
 
 var (
 	// A geometry for testing purposes, just c'n'p to geojson.io for
@@ -49,35 +43,7 @@ var (
 	  }
 	]
   }`
-	loop                           = `39.7642140375156,-86.54342651367186,39.86600654754002,-86.46034240722656,39.774769485295465,-86.31683349609374,39.66227082075381,-86.36764526367188,39.62525937371228,-86.52969360351562,39.73676229957947,-86.57020568847656`
-	loopWithOnlyTwoPoints          = `39.7642140375156,-86.54342651367186,39.86600654754002,-86.46034240722656`
-	loopWithOddNumberOfCoordinates = `39.7642140375156,-86.54342651367186,39.86600654754002,-86.46034240722656,-86.31683349609374`
-
-	// the winding of the loop (we take it from geojson, which defaults to CW),
-	// whereas S2 expects CCW.
-	loopWinding = windingCW
+	Loop                           = `39.7642140375156,-86.54342651367186,39.86600654754002,-86.46034240722656,39.774769485295465,-86.31683349609374,39.66227082075381,-86.36764526367188,39.62525937371228,-86.52969360351562,39.73676229957947,-86.57020568847656`
+	LoopWithOnlyTwoPoints          = `39.7642140375156,-86.54342651367186,39.86600654754002,-86.46034240722656`
+	LoopWithOddNumberOfCoordinates = `39.7642140375156,-86.54342651367186,39.86600654754002,-86.46034240722656,-86.31683349609374`
 )
-
-func TestParseAreaSucceedsForValidLoop(t *testing.T) {
-	loop, err := parseArea(loop, loopWinding)
-	require.NoError(t, err)
-	require.NotNil(t, loop)
-}
-
-func TestParseAreaFailsForEmptyString(t *testing.T) {
-	loop, err := parseArea("", loopWinding)
-	require.Error(t, err)
-	require.Nil(t, loop)
-}
-
-func TestParseAreaFailsForLoopWithOnlyTwoPoints(t *testing.T) {
-	loop, err := parseArea(loopWithOnlyTwoPoints, loopWinding)
-	require.Error(t, err)
-	require.Nil(t, loop)
-}
-
-func TestParseAreaFailsForLoopWithOddNumberOfCoordinates(t *testing.T) {
-	loop, err := parseArea(loopWithOddNumberOfCoordinates, loopWinding)
-	require.Error(t, err)
-	require.Nil(t, loop)
-}

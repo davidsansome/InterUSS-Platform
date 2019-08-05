@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 
 	"github.com/golang/geo/s2"
@@ -93,7 +94,7 @@ func NewNilStore() Store {
 type Server struct {
 	Store   Store
 	Coverer *s2.RegionCoverer
-	winding winding
+	winding geo.WindingOrder
 }
 
 func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.DeleteIdentificationServiceAreaRequest) (*dspb.DeleteIdentificationServiceAreaResponse, error) {
@@ -126,7 +127,7 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 		return nil, errors.New("missing owner from context")
 	}
 
-	loop, err := parseArea(req.GetArea(), s.winding)
+	loop, err := geo.ParseArea(req.GetArea(), s.winding)
 	if err != nil {
 		return nil, err
 	}

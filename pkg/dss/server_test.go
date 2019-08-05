@@ -5,11 +5,14 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/geo/s2"
-	uuid "github.com/satori/go.uuid"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/geo/testdata"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"github.com/steeling/InterUSS-Platform/pkg/logging"
+
+	"github.com/golang/geo/s2"
+	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -120,12 +123,12 @@ func TestSearchSubscriptionsFailsIfOwnerMissingFromContext(t *testing.T) {
 		s   = &Server{
 			Store:   DecorateLogging(logging.Logger, &mockStore{}),
 			Coverer: DefaultRegionCoverer,
-			winding: windingCW,
+			winding: geo.WindingOrderCW,
 		}
 	)
 
 	_, err := s.SearchSubscriptions(ctx, &dspb.SearchSubscriptionsRequest{
-		Area: loop,
+		Area: testdata.Loop,
 	})
 
 	require.Error(t, err)
@@ -139,12 +142,12 @@ func TestSearchSubscriptionsFailsForInvalidArea(t *testing.T) {
 		s   = &Server{
 			Store:   DecorateLogging(logging.Logger, &mockStore{}),
 			Coverer: DefaultRegionCoverer,
-			winding: windingCW,
+			winding: geo.WindingOrderCW,
 		}
 	)
 
 	_, err := s.SearchSubscriptions(ctx, &dspb.SearchSubscriptionsRequest{
-		Area: loopWithOddNumberOfCoordinates,
+		Area: testdata.LoopWithOddNumberOfCoordinates,
 	})
 
 	require.Error(t, err)
@@ -158,7 +161,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 		s   = &Server{
 			Store:   DecorateLogging(logging.Logger, ms),
 			Coverer: DefaultRegionCoverer,
-			winding: windingCW,
+			winding: geo.WindingOrderCW,
 		}
 	)
 
@@ -175,7 +178,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 		}, error(nil),
 	)
 	resp, err := s.SearchSubscriptions(ctx, &dspb.SearchSubscriptionsRequest{
-		Area: loop,
+		Area: testdata.Loop,
 	})
 
 	require.NoError(t, err)
@@ -185,7 +188,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 }
 
 func TestDefaultRegionCovererProducesResults(t *testing.T) {
-	area, err := parseArea(loop, windingCW)
+	area, err := geo.ParseArea(testdata.Loop, geo.WindingOrderCW)
 	require.NoError(t, err)
 	require.NotNil(t, area)
 
