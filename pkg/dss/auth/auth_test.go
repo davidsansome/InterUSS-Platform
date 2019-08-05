@@ -18,7 +18,8 @@ var hmacSampleSecret = []byte("secret_key")
 
 func symmetricTokenCtx(ctx context.Context, key []byte) context.Context {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"foo": "bar",
+		"foo":       "bar",
+		"client_id": "me",
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
@@ -31,7 +32,8 @@ func symmetricTokenCtx(ctx context.Context, key []byte) context.Context {
 
 func rsaTokenCtx(ctx context.Context, key *rsa.PrivateKey) context.Context {
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"foo": "bar",
+		"foo":       "bar",
+		"client_id": "me",
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
@@ -94,6 +96,13 @@ func TestRSAAuthInterceptor(t *testing.T) {
 			t.Errorf("expected: %v, got: %v", test.code, status.Code(err))
 		}
 	}
+}
+
+func TestClaimsValidation(t *testing.T) {
+	claims := &claims{}
+	require.Error(t, claims.Valid())
+	claims.ClientID = "me"
+	require.NoError(t, claims.Valid())
 }
 
 func TestContextWithOwner(t *testing.T) {

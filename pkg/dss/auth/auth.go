@@ -69,23 +69,18 @@ func (a *authClient) AuthInterceptor(ctx context.Context, req interface{}, info 
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "missing token")
 	}
+
+	claims := claims{}
+
 	// TODO(steeling): Modify to ParseWithClaims and inspect claims.
-	token, err := jwt.Parse(tknStr, func(token *jwt.Token) (interface{}, error) {
+	_, err := jwt.ParseWithClaims(tknStr, &claims, func(token *jwt.Token) (interface{}, error) {
 		return a.key, nil
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid token")
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "invalid token")
-	}
-	if clientID, ok := claims["client_id"].(string); ok {
-		ctx = ContextWithOwner(ctx, clientID)
-	}
-
-	return handler(ctx, req)
+	return handler(ContextWithOwner(ctx, claims.ClientID), req)
 }
 
 func getToken(ctx context.Context) (string, bool) {
