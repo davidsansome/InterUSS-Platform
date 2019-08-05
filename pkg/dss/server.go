@@ -7,79 +7,7 @@ import (
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
-
-	"github.com/golang/geo/s2"
-	"go.uber.org/zap"
 )
-
-// Store abstracts interactions with a backend storage layer.
-type Store interface {
-	// Close closes the store and should release all resources.
-	Close() error
-
-	// DeleteIdentificationServiceArea deletes the IdentificationServiceArea identified by "id" and owned by "owner".
-	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
-	DeleteIdentificationServiceArea(ctx context.Context, id string, owner string) (*dspb.IdentificationServiceArea, []*dspb.SubscriberToNotify, error)
-
-	// GetSubscription returns the subscription identified by "id".
-	GetSubscription(ctx context.Context, id string) (*dspb.Subscription, error)
-
-	// DeleteSubscription deletes the subscription identified by "id" and
-	// returns the deleted subscription.
-	DeleteSubscription(ctx context.Context, id, version string) (*dspb.Subscription, error)
-
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*dspb.Subscription, error)
-}
-
-type loggingStore struct {
-	logger *zap.Logger
-	next   Store
-}
-
-func (ls *loggingStore) Close() error {
-	err := ls.next.Close()
-	ls.logger.Debug("Store.Close", zap.Error(err))
-	return err
-}
-
-func (ls *loggingStore) DeleteIdentificationServiceArea(ctx context.Context, id string, owner string) (*dspb.IdentificationServiceArea, []*dspb.SubscriberToNotify, error) {
-	area, subscriptions, err := ls.next.DeleteIdentificationServiceArea(ctx, id, owner)
-	ls.logger.Debug(
-		"Store.DeleteIdentificationServiceArea",
-		zap.String("id", id),
-		zap.String("owner", owner),
-		zap.Any("area", area),
-		zap.Any("subscriptions", subscriptions),
-		zap.Error(err),
-	)
-	return area, subscriptions, err
-}
-func (ls *loggingStore) GetSubscription(ctx context.Context, id string) (*dspb.Subscription, error) {
-	subscription, err := ls.next.GetSubscription(ctx, id)
-	ls.logger.Debug("Store.GetSubscription", zap.String("id", id), zap.Any("subscription", subscription), zap.Error(err))
-	return subscription, err
-}
-
-func (ls *loggingStore) DeleteSubscription(ctx context.Context, id, version string) (*dspb.Subscription, error) {
-	subscription, err := ls.next.DeleteSubscription(ctx, id, version)
-	ls.logger.Debug("Store.DeleteSubscription", zap.String("id", id), zap.String("version", version), zap.Any("subscription", subscription), zap.Error(err))
-	return subscription, err
-}
-
-func (ls *loggingStore) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*dspb.Subscription, error) {
-	subscriptions, err := ls.next.SearchSubscriptions(ctx, cells, owner)
-	ls.logger.Debug("Store.SearchSubscriptions", zap.Any("cells", cells), zap.String("owner", owner), zap.Any("subscriptions", subscriptions), zap.Error(err))
-	return subscriptions, err
-}
-
-// DecorateLogging decorates store with logging at debug level.
-func DecorateLogging(logger *zap.Logger, store Store) Store {
-	return &loggingStore{
-		logger: logger,
-		next:   store,
-	}
-}
 
 // NewNilStore returns a nil Store instance.
 func NewNilStore() Store {
@@ -88,9 +16,7 @@ func NewNilStore() Store {
 
 // Server implements dssproto.DiscoveryAndSynchronizationService.
 type Server struct {
-	Store   Store
-	Coverer *s2.RegionCoverer
-	winding geo.WindingOrder
+	Store Store
 }
 
 func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.DeleteIdentificationServiceAreaRequest) (*dspb.DeleteIdentificationServiceAreaResponse, error) {
@@ -142,7 +68,7 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 		return nil, errors.New("missing owner from context")
 	}
 
-	cu, err := geo.AreaToCellIDs(req.GetArea(), s.winding, s.Coverer)
+	cu, err := geo.AreaToCellIDs(req.GetArea())
 	if err != nil {
 		return nil, err
 	}

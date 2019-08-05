@@ -9,7 +9,6 @@ import (
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo/testdata"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
-	"github.com/steeling/InterUSS-Platform/pkg/logging"
 
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
@@ -70,7 +69,7 @@ func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
 				r.subscription, r.err,
 			)
 			s := &Server{
-				Store:   DecorateLogging(logging.Logger, store),
+				Store:   store,
 				Coverer: geo.DefaultRegionCoverer,
 			}
 
@@ -108,7 +107,7 @@ func TestGetSubscriptionCallsIntoMockStore(t *testing.T) {
 				r.subscription, r.err,
 			)
 			s := &Server{
-				Store:   DecorateLogging(logging.Logger, store),
+				Store:   store,
 				Coverer: geo.DefaultRegionCoverer,
 			}
 
@@ -127,7 +126,7 @@ func TestSearchSubscriptionsFailsIfOwnerMissingFromContext(t *testing.T) {
 		ctx = context.Background()
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   DecorateLogging(logging.Logger, &mockStore{}),
+			Store:   &mockStore{},
 			Coverer: geo.DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
@@ -146,7 +145,7 @@ func TestSearchSubscriptionsFailsForInvalidArea(t *testing.T) {
 		ctx = auth.ContextWithOwner(context.Background(), "foo")
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   DecorateLogging(logging.Logger, &mockStore{}),
+			Store:   &mockStore{},
 			Coverer: geo.DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
@@ -165,7 +164,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 		ctx = auth.ContextWithOwner(context.Background(), "foo")
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   DecorateLogging(logging.Logger, ms),
+			Store:   ms,
 			Coverer: geo.DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
@@ -198,7 +197,7 @@ func TestDeleteIdentificationServiceAreaRequiresOwnerInContext(t *testing.T) {
 		id = uuid.NewV4().String()
 		ms = &mockStore{}
 		s  = &Server{
-			Store:   DecorateLogging(logging.Logger, ms),
+			Store:   ms,
 			Coverer: DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
@@ -218,7 +217,7 @@ func TestDeleteIdentificationServiceAreaCallsIntoStore(t *testing.T) {
 		ctx = auth.ContextWithOwner(context.Background(), "foo")
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   DecorateLogging(logging.Logger, ms),
+			Store:   ms,
 			Coverer: DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
