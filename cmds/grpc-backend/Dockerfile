@@ -1,4 +1,5 @@
-FROM golang:latest AS build
+FROM golang:1.12-alpine AS build
+RUN apk add git bash make
 ADD . /app
 WORKDIR /app
 RUN go mod download
