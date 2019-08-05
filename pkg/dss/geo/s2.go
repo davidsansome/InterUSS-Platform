@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -21,12 +22,13 @@ const (
 )
 
 var (
-	// DefaultRegionCoverer is the default s2.RegionCoverer for mapping areas
+	// defaultRegionCoverer is the default s2.RegionCoverer for mapping areas
 	// and extents to s2.CellUnion instances.
 	defaultRegionCoverer = &s2.RegionCoverer{
 		MinLevel: DefaultMinimumCellLevel,
 		MaxLevel: DefaultMaximumCellLevel,
 	}
+	// RegionCoverer provides an overridable interface to defaultRegionCoverer
 	RegionCoverer = defaultRegionCoverer
 
 	errOddNumberOfCoordinatesInAreaString = errors.New("odd number of coordinates in area string")
@@ -76,20 +78,21 @@ func GeoPolygonToCellIDs(geopolygon *dspb.GeoPolygon) s2.CellUnion {
 //
 // TODO(tvoss):
 //   * Agree and implement a maximum number of points in area
-func stringToGeoPolygon(area string) (s2.CellUnion, error) {
+func AreaToCellIDs(area string) (s2.CellUnion, error) {
 	var (
 		lat, lng = float64(0), float64(0)
 		points   = []s2.Point{}
 		counter  = 0
 		scanner  = bufio.NewScanner(strings.NewReader(area))
 	)
-	numCoords := strings.Count(area, ",") + 1
+	numCoords := strings.Count(area, ",")/2 + 1
 	if numCoords%2 == 1 {
 		return nil, errOddNumberOfCoordinatesInAreaString
 	}
 	if numCoords < 3 {
 		return nil, errNotEnoughPointsInPolygon
 	}
+	fmt.Println(numCoords)
 	scanner.Split(splitAtComma)
 
 	for scanner.Scan() {

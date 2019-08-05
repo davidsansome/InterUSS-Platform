@@ -4,10 +4,30 @@ import (
 	"context"
 	"errors"
 
+	"github.com/golang/geo/s2"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 )
+
+type Store interface {
+	// Close closes the store and should release all resources.
+	Close() error
+
+	// DeleteIdentificationServiceArea deletes the IdentificationServiceArea identified by "id" and owned by "owner".
+	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
+	DeleteIdentificationServiceArea(ctx context.Context, id string, owner string) (*dspb.IdentificationServiceArea, []*dspb.SubscriberToNotify, error)
+
+	// GetSubscription returns the subscription identified by "id".
+	GetSubscription(ctx context.Context, id string) (*dspb.Subscription, error)
+
+	// DeleteSubscription deletes the subscription identified by "id" and
+	// returns the deleted subscription.
+	DeleteSubscription(ctx context.Context, id, version string) (*dspb.Subscription, error)
+
+	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
+	SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*dspb.Subscription, error)
+}
 
 // NewNilStore returns a nil Store instance.
 func NewNilStore() Store {

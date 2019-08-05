@@ -69,8 +69,7 @@ func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
 				r.subscription, r.err,
 			)
 			s := &Server{
-				Store:   store,
-				Coverer: geo.DefaultRegionCoverer,
+				Store: store,
 			}
 
 			response, err := s.DeleteSubscription(context.Background(), &dspb.DeleteSubscriptionRequest{
@@ -107,8 +106,7 @@ func TestGetSubscriptionCallsIntoMockStore(t *testing.T) {
 				r.subscription, r.err,
 			)
 			s := &Server{
-				Store:   store,
-				Coverer: geo.DefaultRegionCoverer,
+				Store: store,
 			}
 
 			response, err := s.GetSubscription(context.Background(), &dspb.GetSubscriptionRequest{
@@ -126,9 +124,7 @@ func TestSearchSubscriptionsFailsIfOwnerMissingFromContext(t *testing.T) {
 		ctx = context.Background()
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   &mockStore{},
-			Coverer: geo.DefaultRegionCoverer,
-			winding: geo.WindingOrderCW,
+			Store: &mockStore{},
 		}
 	)
 
@@ -145,9 +141,7 @@ func TestSearchSubscriptionsFailsForInvalidArea(t *testing.T) {
 		ctx = auth.ContextWithOwner(context.Background(), "foo")
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   &mockStore{},
-			Coverer: geo.DefaultRegionCoverer,
-			winding: geo.WindingOrderCW,
+			Store: &mockStore{},
 		}
 	)
 
@@ -164,9 +158,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 		ctx = auth.ContextWithOwner(context.Background(), "foo")
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   ms,
-			Coverer: geo.DefaultRegionCoverer,
-			winding: geo.WindingOrderCW,
+			Store: ms,
 		}
 	)
 
@@ -197,9 +189,7 @@ func TestDeleteIdentificationServiceAreaRequiresOwnerInContext(t *testing.T) {
 		id = uuid.NewV4().String()
 		ms = &mockStore{}
 		s  = &Server{
-			Store:   ms,
-			Coverer: DefaultRegionCoverer,
-			winding: geo.WindingOrderCW,
+			Store: ms,
 		}
 	)
 
@@ -217,9 +207,7 @@ func TestDeleteIdentificationServiceAreaCallsIntoStore(t *testing.T) {
 		ctx = auth.ContextWithOwner(context.Background(), "foo")
 		ms  = &mockStore{}
 		s   = &Server{
-			Store:   ms,
-			Coverer: DefaultRegionCoverer,
-			winding: geo.WindingOrderCW,
+			Store: ms,
 		}
 	)
 
@@ -255,7 +243,7 @@ func TestDeleteIdentificationServiceAreaCallsIntoStore(t *testing.T) {
 }
 
 func TestDefaultRegionCovererProducesResults(t *testing.T) {
-	cover, err := geo.AreaToCellIDs(testdata.Loop, geo.WindingOrderCW, geo.DefaultRegionCoverer)
+	cover, err := geo.AreaToCellIDs(testdata.Loop)
 	require.NoError(t, err)
 	require.NotNil(t, cover)
 }
