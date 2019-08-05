@@ -12,26 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Default cell level choices.
-//
-// The level is chosen such that we operate on cells with an area of ~1km^2.
-const (
-	DefaultMinimumCellLevel int = 13
-	DefaultMaximumCellLevel int = 13
-)
-
-var (
-	// DefaultRegionCoverer is the default s2.RegionCoverer for mapping areas
-	// and extents to s2.CellUnion instances.
-	DefaultRegionCoverer = &s2.RegionCoverer{
-		MinLevel: DefaultMinimumCellLevel,
-		MaxLevel: DefaultMaximumCellLevel,
-		// TODO(tvoss): Fine-tune these values.
-		LevelMod: 3,
-		MaxCells: 10,
-	}
-)
-
 // Store abstracts interactions with a backend storage layer.
 type Store interface {
 	// Close closes the store and should release all resources.
