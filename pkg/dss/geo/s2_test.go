@@ -1,7 +1,6 @@
 package geo
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo/testdata"
@@ -39,13 +38,6 @@ func TestGeoPolygonToCellIDs(t *testing.T) {
 			Lng: -122.086504,
 		},
 	}}, regionCoverer)
-
-	for i, cell := range got {
-		if i > 0 {
-			fmt.Print(",")
-		}
-		fmt.Print(cell.ToToken())
-	}
 
 	want := s2.CellUnion{
 		s2.CellIDFromToken("808fb0ac"),
