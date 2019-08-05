@@ -65,7 +65,7 @@ func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
 			)
 			s := &Server{
 				Store:   DecorateLogging(logging.Logger, store),
-				Coverer: DefaultRegionCoverer,
+				Coverer: geo.DefaultRegionCoverer,
 			}
 
 			response, err := s.DeleteSubscription(context.Background(), &dspb.DeleteSubscriptionRequest{
@@ -103,7 +103,7 @@ func TestGetSubscriptionCallsIntoMockStore(t *testing.T) {
 			)
 			s := &Server{
 				Store:   DecorateLogging(logging.Logger, store),
-				Coverer: DefaultRegionCoverer,
+				Coverer: geo.DefaultRegionCoverer,
 			}
 
 			response, err := s.GetSubscription(context.Background(), &dspb.GetSubscriptionRequest{
@@ -122,7 +122,7 @@ func TestSearchSubscriptionsFailsIfOwnerMissingFromContext(t *testing.T) {
 		ms  = &mockStore{}
 		s   = &Server{
 			Store:   DecorateLogging(logging.Logger, &mockStore{}),
-			Coverer: DefaultRegionCoverer,
+			Coverer: geo.DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
 	)
@@ -141,7 +141,7 @@ func TestSearchSubscriptionsFailsForInvalidArea(t *testing.T) {
 		ms  = &mockStore{}
 		s   = &Server{
 			Store:   DecorateLogging(logging.Logger, &mockStore{}),
-			Coverer: DefaultRegionCoverer,
+			Coverer: geo.DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
 	)
@@ -160,7 +160,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 		ms  = &mockStore{}
 		s   = &Server{
 			Store:   DecorateLogging(logging.Logger, ms),
-			Coverer: DefaultRegionCoverer,
+			Coverer: geo.DefaultRegionCoverer,
 			winding: geo.WindingOrderCW,
 		}
 	)
@@ -188,10 +188,7 @@ func TestSearchSubscriptionsCallsIntoStore(t *testing.T) {
 }
 
 func TestDefaultRegionCovererProducesResults(t *testing.T) {
-	area, err := geo.ParseArea(testdata.Loop, geo.WindingOrderCW)
+	cover, err := geo.AreaToCellIDs(testdata.Loop, geo.WindingOrderCW, geo.DefaultRegionCoverer)
 	require.NoError(t, err)
-	require.NotNil(t, area)
-
-	cells := DefaultRegionCoverer.Covering(area)
-	require.NotNil(t, cells)
+	require.NotNil(t, cover)
 }

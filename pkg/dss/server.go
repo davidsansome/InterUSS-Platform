@@ -12,26 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Default cell level choices.
-//
-// The level is chosen such that we operate on cells with an area of ~1km^2.
-const (
-	DefaultMinimumCellLevel int = 13
-	DefaultMaximumCellLevel int = 13
-)
-
-var (
-	// DefaultRegionCoverer is the default s2.RegionCoverer for mapping areas
-	// and extents to s2.CellUnion instances.
-	DefaultRegionCoverer = &s2.RegionCoverer{
-		MinLevel: DefaultMinimumCellLevel,
-		MaxLevel: DefaultMaximumCellLevel,
-		// TODO(tvoss): Fine-tune these values.
-		LevelMod: 3,
-		MaxCells: 10,
-	}
-)
-
 // Store abstracts interactions with a backend storage layer.
 type Store interface {
 	// Close closes the store and should release all resources.
@@ -127,16 +107,11 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 		return nil, errors.New("missing owner from context")
 	}
 
-	loop, err := geo.ParseArea(req.GetArea(), s.winding)
+	cu, err := geo.AreaToCellIDs(req.GetArea(), s.winding, s.Coverer)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(tvoss): We should agree on a maximum area covered by loop and error
-	// out if the threshold is exceeded. Otherwise, the next call will take
-	// a significant amount of time, and we have no way to interrupt it using a
-	// context.
-	cu := s.Coverer.Covering(loop)
 	subscriptions, err := s.Store.SearchSubscriptions(ctx, cu, owner)
 	if err != nil {
 		return nil, err

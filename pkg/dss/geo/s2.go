@@ -12,6 +12,13 @@ import (
 )
 
 const (
+	// DefaultMinimumCellLevel is the default minimum cell level, chosen such
+	// that the minimum cell size is ~1km^2.
+	DefaultMinimumCellLevel int = 13
+	// DefaultMaximumCellLevel is the default minimum cell level, chosen such
+	// that the maximum cell size is ~1km^2.
+	DefaultMaximumCellLevel int = 13
+
 	// WindingOrderCCW describes the counter-clockwise winding order.
 	WindingOrderCCW WindingOrder = 0
 	// WindingOrderCW describes the clockwise winding order.
@@ -19,6 +26,13 @@ const (
 )
 
 var (
+	// DefaultRegionCoverer is the default s2.RegionCoverer for mapping areas
+	// and extents to s2.CellUnion instances.
+	DefaultRegionCoverer = &s2.RegionCoverer{
+		MinLevel: DefaultMinimumCellLevel,
+		MaxLevel: DefaultMaximumCellLevel,
+	}
+
 	errOddNumberOfCoordinatesInAreaString = errors.New("odd number of coordinates in area string")
 	errNotEnoughPointsInPolygon           = errors.New("not enough points in polygon")
 )
@@ -61,12 +75,12 @@ func GeoPolygonToCellIDs(geopolygon *dspb.GeoPolygon, rc *s2.RegionCoverer) s2.C
 	return rc.Covering(loop)
 }
 
-// ParseArea parses "area" in the format 'lat0,lon0,lat1,lon1,...'
-// and returns the resulting Loop.
+// AreaToCellIDs parses "area" in the format 'lat0,lon0,lat1,lon1,...'
+// and returns the resulting s2.CellUnion.
 //
 // TODO(tvoss):
 //   * Agree and implement a maximum number of points in area
-func ParseArea(area string, winding WindingOrder) (*s2.Loop, error) {
+func AreaToCellIDs(area string, winding WindingOrder, rc *s2.RegionCoverer) (s2.CellUnion, error) {
 	var (
 		lat, lng = float64(0), float64(0)
 		points   = []s2.Point{}
@@ -109,5 +123,5 @@ func ParseArea(area string, winding WindingOrder) (*s2.Loop, error) {
 		return nil, errNotEnoughPointsInPolygon
 	}
 
-	return s2.LoopFromPoints(points), nil
+	return rc.Covering(s2.LoopFromPoints(points)), nil
 }
