@@ -53,4 +53,4 @@ spec:
         command:
           - "/bin/bash"
           - "-ecx"
-          - "exec ./main.go -port=8081 -public_key_file=/public-certs/oauth.pem"
+          - "exec ./main.go -addr=:8081 -public_key_file=/public-certs/oauth.pem"
