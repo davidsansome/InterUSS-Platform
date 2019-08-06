@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -92,7 +91,6 @@ func AreaToCellIDs(area string) (s2.CellUnion, error) {
 	if numCoords < 3 {
 		return nil, errNotEnoughPointsInPolygon
 	}
-	fmt.Println(numCoords)
 	scanner.Split(splitAtComma)
 
 	for scanner.Scan() {
