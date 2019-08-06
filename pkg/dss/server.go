@@ -6,6 +6,7 @@ import (
 
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 
 	"github.com/golang/geo/s2"
@@ -49,7 +50,10 @@ type Store interface {
 	DeleteSubscription(ctx context.Context, id, version string) (*dspb.Subscription, error)
 
 	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*dspb.Subscription, error)
+	SearchSubscriptions(ctx context.Context, sub models.Subscription) ([]*dspb.Subscription, error)
+
+	// InsertSubscription inserts the subscription with the given id, and returns the stored value.
+	InsertSubscription(ctx context.Context, sub models.Subscription) (*dspb.Subscription, error)
 }
 
 type loggingStore struct {
@@ -91,6 +95,10 @@ func (ls *loggingStore) SearchSubscriptions(ctx context.Context, cells s2.CellUn
 	subscriptions, err := ls.next.SearchSubscriptions(ctx, cells, owner)
 	ls.logger.Debug("Store.SearchSubscriptions", zap.Any("cells", cells), zap.String("owner", owner), zap.Any("subscriptions", subscriptions), zap.Error(err))
 	return subscriptions, err
+}
+
+func (ls *loggingStore) InsertSubscription(ctx context.Context, sub *models.Subscription) (*dspb.Subscription, error) {
+	return nil, nil
 }
 
 // DecorateLogging decorates store with logging at debug level.
