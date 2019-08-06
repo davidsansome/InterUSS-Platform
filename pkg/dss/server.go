@@ -194,7 +194,7 @@ func (s *Server) PatchIdentificationServiceArea(ctx context.Context, req *dspb.P
 	return nil, nil
 }
 
-func (s *Server) PatchSubscription(ctx context.Context, req *dspb.PatchSubscriptionRequest) (*dspb.PutSubscriptionResponse, error) {
+func (s *Server) PatchSubscription(ctx context.Context, req *dspb.PatchSubscriptionRequest) (*dspb.PatchSubscriptionResponse, error) {
 	return nil, nil
 }
 
