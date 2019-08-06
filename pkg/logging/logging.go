@@ -37,10 +37,9 @@ func init() {
 		panic(err)
 	}
 
-	// Make sure that log statements internal to gRPC library are logged using the Logger as well.
-	grpc_zap.ReplaceGrpcLoggerV2(Logger)
-
 	Logger = l
+	// Make sure that log statements internal to gRPC library are logged using the Logger as well.
+	grpcReplaceLogger(Logger)
 }
 
 func Interceptor() grpc.UnaryServerInterceptor {

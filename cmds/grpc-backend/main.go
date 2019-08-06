@@ -41,7 +41,7 @@ func RunGRPCServer(ctx context.Context, address string) error {
 		return err
 	}
 
-	s := grpc.NewServer(grpc_middleware.WithUnaryServerChain(logging.Interceptor, ac.AuthInterceptor))
+	s := grpc.NewServer(grpc_middleware.WithUnaryServerChain(logging.Interceptor(), ac.AuthInterceptor))
 	if err != nil {
 		return err
 	}
