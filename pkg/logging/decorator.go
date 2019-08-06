@@ -4,12 +4,14 @@ import (
 	"context"
 
 	"github.com/golang/geo/s2"
+	"github.com/steeling/InterUSS-Platform/pkg/dss"
+	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"go.uber.org/zap"
 )
 
 type loggingStore struct {
 	logger *zap.Logger
-	next   Store
+	next   dss.Store
 }
 
 func (ls *loggingStore) Close() error {
@@ -49,7 +51,7 @@ func (ls *loggingStore) SearchSubscriptions(ctx context.Context, cells s2.CellUn
 }
 
 // DecorateLogging decorates store with logging at debug level.
-func DecorateLogging(logger *zap.Logger, store Store) Store {
+func DecorateLogging(logger *zap.Logger, store dss.Store) dss.Store {
 	return &loggingStore{
 		logger: logger,
 		next:   store,
