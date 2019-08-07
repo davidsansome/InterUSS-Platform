@@ -73,11 +73,7 @@ func NewRSAAuthClient(keyFile string) (*authClient, error) {
 }
 
 func (a *authClient) RequireScopes(scopes map[string][]string) {
-<<<<<<< HEAD
 	a.requiredScopes = scopes
-=======
-	a.scopes = scopes
->>>>>>> Verify scopes
 }
 
 func (a *authClient) AuthInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
