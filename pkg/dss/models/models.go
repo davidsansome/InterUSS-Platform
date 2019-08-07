@@ -25,12 +25,12 @@ func timestampToVersionString(t time.Time) string {
 	return strconv.FormatUint(uint64(t.UnixNano()), versionBase)
 }
 
-type nullTime struct {
+type NullTime struct {
 	Time  time.Time
 	Valid bool // Valid indicates whether Time carries a non-NULL value.
 }
 
-func (nt *nullTime) Scan(value interface{}) error {
+func (nt *NullTime) Scan(value interface{}) error {
 	if value == nil {
 		nt.Time = time.Time{}
 		nt.Valid = false
@@ -46,7 +46,7 @@ func (nt *nullTime) Scan(value interface{}) error {
 	return nil
 }
 
-func (nt nullTime) Value() (driver.Value, error) {
+func (nt NullTime) Value() (driver.Value, error) {
 	if !nt.Valid {
 		return nil, nil
 	}

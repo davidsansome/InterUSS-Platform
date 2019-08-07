@@ -12,17 +12,7 @@ import (
 	"go.uber.org/multierr"
 )
 
-type crSubscriptionStore struct {
-	*sql.DB
-}
-
-type queryable interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-}
-
-func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.Subscription, error) {
+func (c *Store) fetchSubscriptions(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.Subscription, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -52,7 +42,7 @@ func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query stri
 	return payload, nil
 }
 
-func (c *crSubscriptionStore) fetchByID(ctx context.Context, q queryable, id string) (*models.Subscription, error) {
+func (c *Store) fetchSubscriptionByID(ctx context.Context, q queryable, id string) (*models.Subscription, error) {
 	// TODO(steeling) don't fetch by *
 	const query = `
 		SELECT * FROM
@@ -75,7 +65,31 @@ func (c *crSubscriptionStore) fetchByID(ctx context.Context, q queryable, id str
 	return s, nil
 }
 
-func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *models.Subscription) error {
+func (c *Store) fetchSubscriptionByIDAndOwner(ctx context.Context, q queryable, id, owner string) (*models.Subscription, error) {
+	// TODO(steeling) don't fetch by *
+	const query = `
+		SELECT * FROM
+			subscriptions
+		WHERE
+			id = $1
+			AND owner = $2`
+	s := new(models.Subscription)
+
+	err := q.QueryRowContext(ctx, query, id, owner).Scan(
+		&s.ID,
+		&s.Owner,
+		&s.Url,
+		&s.NotificationIndex,
+		&s.StartTime,
+		&s.EndTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Subscription) error {
 	const (
 		upsertQuery = `
 		UPSERT INTO
@@ -112,28 +126,28 @@ func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *models.S
 }
 
 // Get returns the subscription identified by "id".
-func (c *crSubscriptionStore) Get(ctx context.Context, id string) (*models.Subscription, error) {
-	return c.fetchByID(ctx, c.DB, id)
+func (c *Store) GetSubscription(ctx context.Context, id string) (*models.Subscription, error) {
+	return c.fetchSubscriptionByID(ctx, c.DB, id)
 }
 
 // Insert inserts subscription into the store and returns
 // the resulting subscription including its ID.
-func (c *crSubscriptionStore) Insert(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
+func (c *Store) InsertSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
 
 	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}
-	_, err = c.fetchByID(ctx, tx, s.ID)
-	if err == nil {
+	_, err = c.fetchSubscriptionByID(ctx, tx, s.ID)
+	if err != sql.ErrNoRows {
 		// TODO(steeling) fix errors
 		return nil, errors.New("already exists")
 	}
-	if err != sql.ErrNoRows {
+	if err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	if err := c.push(ctx, tx, s); err != nil {
+	if err := c.pushSubscription(ctx, tx, s); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -144,21 +158,13 @@ func (c *crSubscriptionStore) Insert(ctx context.Context, s *models.Subscription
 
 // updatesSubscription updates the subscription  and returns
 // the resulting subscription including its ID.
-func (c *crSubscriptionStore) Update(ctx context.Context, s *models.Subscription, cells s2.CellUnion) (*models.Subscription, error) {
-	const (
-		getQuery = `
-		SELECT * FROM
-			subscriptions
-		WHERE
-			id = $1`
-	)
-
+func (c *Store) UpdateSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
 	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}
 
-	old, err := c.fetchByID(ctx, tx, s.ID)
+	old, err := c.fetchSubscriptionByID(ctx, tx, s.ID)
 	switch {
 	case err == sql.ErrNoRows: // Return a 404 here.
 		return nil, multierr.Combine(err, tx.Rollback())
@@ -169,7 +175,7 @@ func (c *crSubscriptionStore) Update(ctx context.Context, s *models.Subscription
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	if err := c.push(ctx, tx, old.Apply(s)); err != nil {
+	if err := c.pushSubscription(ctx, tx, old.Apply(s)); err != nil {
 		return nil, err
 	}
 
@@ -181,13 +187,14 @@ func (c *crSubscriptionStore) Update(ctx context.Context, s *models.Subscription
 
 // DeleteSubscription deletes the subscription identified by "id" and
 // returns the deleted subscription.
-func (c *crSubscriptionStore) Delete(ctx context.Context, id, version string) (*models.Subscription, error) {
+func (c *Store) DeleteSubscription(ctx context.Context, id, owner, version string) (*models.Subscription, error) {
 	const (
 		query = `
 		DELETE FROM
 			subscriptions
 		WHERE
-			id = $1`
+			id = $1
+			AND owner = $2`
 	)
 
 	tx, err := c.Begin()
@@ -196,7 +203,7 @@ func (c *crSubscriptionStore) Delete(ctx context.Context, id, version string) (*
 	}
 
 	// We fetch to know whether to return a concurrency error, or a not found error
-	old, err := c.fetchByID(ctx, tx, id)
+	old, err := c.fetchSubscriptionByIDAndOwner(ctx, tx, id, owner)
 	switch {
 	case err == sql.ErrNoRows: // Return a 404 here.
 		return nil, multierr.Combine(err, tx.Rollback())
@@ -207,7 +214,7 @@ func (c *crSubscriptionStore) Delete(ctx context.Context, id, version string) (*
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	if _, err := tx.ExecContext(ctx, query, id); err != nil {
+	if _, err := tx.ExecContext(ctx, query, id, owner); err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
@@ -219,7 +226,7 @@ func (c *crSubscriptionStore) Delete(ctx context.Context, id, version string) (*
 }
 
 // SearchSubscriptions returns all subscriptions in "cells".
-func (c *crSubscriptionStore) Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error) {
+func (c *Store) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error) {
 	const (
 		query = `
 			SELECT
@@ -245,7 +252,7 @@ func (c *crSubscriptionStore) Search(ctx context.Context, cells s2.CellUnion, ow
 		return nil, err
 	}
 
-	subscriptions, err := c.fetch(ctx, tx, query, pq.Array(cells), owner)
+	subscriptions, err := c.fetchSubscriptions(ctx, tx, query, pq.Array(cells), owner)
 	if err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}

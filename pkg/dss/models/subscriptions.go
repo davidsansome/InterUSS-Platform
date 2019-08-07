@@ -28,10 +28,6 @@ type SubscriptionStore interface {
 	Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*Subscription, error)
 }
 
-// func GetSubscriptionStore() SubscriptionStore
-
-var ActiveSubscriptionStore SubscriptionStore
-
 type Subscription struct {
 	// Embed the proto
 	// Unfortunately some types don't implement scanner/valuer, so we add placeholders below.
@@ -40,9 +36,9 @@ type Subscription struct {
 	NotificationIndex int
 	Owner             string
 	Cells             s2.CellUnion
-	// TODO(steeling): abstract nullTime away from models.
-	StartTime  nullTime
-	EndTime    nullTime
+	// TODO(steeling): abstract NullTime away from models.
+	StartTime  NullTime
+	EndTime    NullTime
 	UpdatedAt  time.Time
 	AltitudeHi float32
 	AltitudeLo float32

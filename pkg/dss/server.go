@@ -2,13 +2,13 @@ package dss
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
 
+	"github.com/golang/geo/s2"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
@@ -62,9 +62,40 @@ func NewNilStore() Store {
 
 // Server implements dssproto.DiscoveryAndSynchronizationService.
 type Server struct {
-	*sql.DB
-	scStore  models.SubscriptionStore
-	isaStore models.IdentificationServiceAreaStore
+	Store Store
+}
+
+type Store interface {
+	// Close closes the store and should release all resources.
+	Close() error
+
+	// Delete deletes the IdentificationServiceArea identified by "id" and owned by "owner".
+	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
+	DeleteISA(ctx context.Context, id, owner, version string) (*models.IdentificationServiceArea, []*models.Subscription, error)
+
+	InsertISA(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error)
+
+	UpdateISA(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error)
+	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
+	SearchISAs(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.IdentificationServiceArea, error)
+
+	// GetSubscription returns the subscription identified by "id".
+	GetSubscription(ctx context.Context, id string) (*models.Subscription, error)
+
+	// Delete deletes the subscription identified by "id" and
+	// returns the deleted subscription.
+	DeleteSubscription(ctx context.Context, id, owner, version string) (*models.Subscription, error)
+
+	InsertSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error)
+
+	UpdateSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error)
+
+	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
+	SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error)
+}
+
+func NewNilStore() Store {
+	return nil
 }
 
 func (s *Server) AuthScopes() map[string][]string {
@@ -90,7 +121,7 @@ func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.
 		return nil, errors.New("missing owner from context")
 	}
 
-	isa, subscribers, err := s.isaStore.Delete(ctx, req.GetId(), owner)
+	isa, subscribers, err := s.Store.DeleteISA(ctx, req.GetId(), owner, req.Version)
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
@@ -104,10 +135,7 @@ func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.
 	}
 	sp := make([]*dspb.SubscriberToNotify, len(subscribers))
 	for i, _ := range subscribers {
-		sp[i], err = subscribers[i].ToNotifyProto()
-		if err != nil {
-			return nil, err
-		}
+		sp[i] = subscribers[i].ToNotifyProto()
 	}
 
 	return &dspb.DeleteIdentificationServiceAreaResponse{
@@ -117,7 +145,14 @@ func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.
 }
 
 func (s *Server) DeleteSubscription(ctx context.Context, req *dspb.DeleteSubscriptionRequest) (*dspb.DeleteSubscriptionResponse, error) {
-	subscription, err := s.scStore.Delete(ctx, req.GetId(), req.GetVersion())
+	owner, ok := auth.OwnerFromContext(ctx)
+	if !ok {
+		// TODO(tvoss): Revisit once error propagation strategy is defined. We
+		// might want to avoid leaking raw error messages to callers and instead
+		// just return a generic error indicating a request ID.
+		return nil, errors.New("missing owner from context")
+	}
+	subscription, err := s.Store.DeleteSubscription(ctx, req.GetId(), owner, req.GetVersion())
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
@@ -126,7 +161,7 @@ func (s *Server) DeleteSubscription(ctx context.Context, req *dspb.DeleteSubscri
 	}
 	p, err := subscription.ToProto()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return &dspb.DeleteSubscriptionResponse{
 		Subscription: p,
@@ -196,18 +231,25 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 		return nil, err
 	}
 
-	subscriptions, err := s.scStore.Search(ctx, cu, owner)
+	subscriptions, err := s.Store.SearchSubscriptions(ctx, cu, owner)
 	if err != nil {
 		return nil, err
 	}
+	sp := make([]*dspb.Subscription, len(subscriptions))
+	for i, _ := range subscriptions {
+		sp[i], err = subscriptions[i].ToProto()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &dspb.SearchSubscriptionsResponse{
-		Subscriptions: subscriptions,
+		Subscriptions: sp,
 	}, nil
 }
 
 func (s *Server) GetSubscription(ctx context.Context, req *dspb.GetSubscriptionRequest) (*dspb.GetSubscriptionResponse, error) {
-	subscription, err := s.scStore.Get(ctx, req.GetId())
+	subscription, err := s.Store.GetSubscription(ctx, req.GetId())
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
@@ -216,7 +258,7 @@ func (s *Server) GetSubscription(ctx context.Context, req *dspb.GetSubscriptionR
 	}
 	p, err := subscription.ToProto()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return &dspb.GetSubscriptionResponse{
 		Subscription: p,

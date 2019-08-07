@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"strconv"
 	"time"
 
@@ -10,23 +9,6 @@ import (
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 )
 
-type IdentificationServiceAreaStore interface {
-	// Close closes the store and should release all resources.
-	Close() error
-	// Get returns the IdentificationServiceArea identified by "id".
-	Get(ctx context.Context, id string, owner string) (*IdentificationServiceArea, []*Subscription, error)
-
-	// Delete deletes the IdentificationServiceArea identified by "id" and owned by "owner".
-	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
-	Delete(ctx context.Context, id string, owner string) (*IdentificationServiceArea, []*Subscription, error)
-
-	Insert(ctx context.Context, isa *IdentificationServiceArea) (*IdentificationServiceArea, []*Subscription, error)
-
-	Put(ctx context.Context, isa *IdentificationServiceArea) (*IdentificationServiceArea, []*Subscription, error)
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*IdentificationServiceArea, error)
-}
-
 type IdentificationServiceArea struct {
 	// Embed the proto
 	// Unfortunately some types don't implement scanner/valuer, so we add placeholders below.
@@ -34,9 +16,9 @@ type IdentificationServiceArea struct {
 	Url   string
 	Owner string
 	Cells s2.CellUnion
-	// TODO(steeling): abstract nullTime away from models.
-	StartTime  nullTime
-	EndTime    nullTime
+	// TODO(steeling): abstract NullTime away from models.
+	StartTime  NullTime
+	EndTime    NullTime
 	UpdatedAt  time.Time
 	AltitudeHi float32
 	AltitudeLo float32

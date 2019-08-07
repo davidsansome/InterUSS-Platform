@@ -3,12 +3,14 @@ package cockroach
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
-	"fmt"
 	"strconv"
 	"time"
 	// Pull in the postgres database driver
 )
+
+type Store struct {
+	*sql.DB
+}
 
 type queryable interface {
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
@@ -25,40 +27,6 @@ type scanner interface {
 // 32 is the highest value allowed by strconv
 var versionBase = 32
 
-// nullTime models a timestamp that could be NULL in the database. The model and
-// implementation follows prior art as in sql.Null* types.
-//
-// Please note that this is rather driver-specific. The postgres sql driver
-// errors out when trying to Scan a time.Time from a nil value. Other drivers
-// might behave differently.
-type nullTime struct {
-	Time  time.Time
-	Valid bool // Valid indicates whether Time carries a non-NULL value.
-}
-
-func (nt *nullTime) Scan(value interface{}) error {
-	if value == nil {
-		nt.Time = time.Time{}
-		nt.Valid = false
-		return nil
-	}
-
-	t, ok := value.(time.Time)
-	if !ok {
-		return fmt.Errorf("failed to cast database value, expected time.Time, got %T", value)
-	}
-	nt.Time, nt.Valid = t, ok
-
-	return nil
-}
-
-func (nt nullTime) Value() (driver.Value, error) {
-	if !nt.Valid {
-		return nil, nil
-	}
-	return nt.Time, nil
-}
-
 func versionStringToTimestamp(s string) (time.Time, error) {
 	var t time.Time
 	nanos, err := strconv.ParseUint(s, versionBase, 64)
@@ -70,12 +38,6 @@ func versionStringToTimestamp(s string) (time.Time, error) {
 
 func timestampToVersionString(t time.Time) string {
 	return strconv.FormatUint(uint64(t.UnixNano()), versionBase)
-}
-
-// Store is an implementation of dss.Store using
-// Cockroach DB as its backend store.
-type Store struct {
-	*sql.DB
 }
 
 // Close closes the underlying DB connection.

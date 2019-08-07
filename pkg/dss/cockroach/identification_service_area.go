@@ -3,20 +3,15 @@ package cockroach
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/golang/geo/s2"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/lib/pq"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
-	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"go.uber.org/multierr"
 )
 
-type crISAStore struct {
-	*sql.DB
-}
-
-func (c *crISAStore) fetch(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.IdentificationServiceArea, error) {
+func (c *Store) fetchISAs(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.IdentificationServiceArea, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -31,9 +26,8 @@ func (c *crISAStore) fetch(ctx context.Context, q queryable, query string, args 
 			&i.ID,
 			&i.Owner,
 			&i.Url,
-			&i.NotificationIndex,
-			&i.BeginsAt,
-			&i.ExpiresAt,
+			&i.StartTime,
+			&i.EndTime,
 		)
 		if err != nil {
 			return nil, err
@@ -46,22 +40,21 @@ func (c *crISAStore) fetch(ctx context.Context, q queryable, query string, args 
 	return payload, nil
 }
 
-func (c *crISAStore) fetchByID(ctx context.Context, q queryable, id string) (*models.IdentificationServiceArea, error) {
+func (c *Store) fetchISAByID(ctx context.Context, q queryable, id string) (*models.IdentificationServiceArea, error) {
 	// TODO(steeling) don't fetch by *
 	const query = `
 		SELECT * FROM
 			identification_service_areas
 		WHERE
 			id = $1`
-	s := new(models.IdentificationServiceArea)
+	i := new(models.IdentificationServiceArea)
 
 	err := q.QueryRowContext(ctx, query, id).Scan(
 		&i.ID,
 		&i.Owner,
 		&i.Url,
-		&i.NotificationIndex,
-		&i.BeginsAt,
-		&i.ExpiresAt,
+		&i.StartTime,
+		&i.EndTime,
 	)
 	if err != nil {
 		return nil, err
@@ -69,7 +62,30 @@ func (c *crISAStore) fetchByID(ctx context.Context, q queryable, id string) (*mo
 	return i, nil
 }
 
-func (c *crSubscriptionStore) push(ctx context.Context, tx *sql.Tx, i *models.IdentificationServiceArea) error {
+func (c *Store) fetchISAByIDAndOwner(ctx context.Context, q queryable, id, owner string) (*models.IdentificationServiceArea, error) {
+	// TODO(steeling) don't fetch by *
+	const query = `
+		SELECT * FROM
+			identification_service_areas
+		WHERE
+			id = $1
+			AND owner = $2`
+	i := new(models.IdentificationServiceArea)
+
+	err := q.QueryRowContext(ctx, query, id, owner).Scan(
+		&i.ID,
+		&i.Owner,
+		&i.Url,
+		&i.StartTime,
+		&i.EndTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return i, nil
+}
+
+func (c *Store) pushISA(ctx context.Context, tx *sql.Tx, i *models.IdentificationServiceArea) error {
 	const (
 		upsertQuery = `
 		UPSERT INTO
@@ -89,142 +105,111 @@ func (c *crSubscriptionStore) push(ctx context.Context, tx *sql.Tx, i *models.Id
 		i.ID,
 		i.Owner,
 		i.Url,
-		i.NotificationIndex,
-		i.BeginsAt,
-		i.ExpiresAt,
+		i.StartTime,
+		i.EndTime,
 	); err != nil {
 		return err
 	}
 
 	// TODO(steeling) we also need to delete any leftover cells.
-	for _, cell := range s.Cells {
-		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), s.ID); err != nil {
+	for _, cell := range i.Cells {
+		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), i.ID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *crISAStore) Insert(ctx context.Context, serviceArea *dspb.IdentificationServiceArea, cells s2.CellUnion) (*dspb.IdentificationServiceArea, error) {
+func (c *Store) populateISACells(ctx context.Context, q queryable, i *models.IdentificationServiceArea) error {
+	const query = `
+	SELECT
+		cell_id
+	FROM
+		cells_identification_service_areas
+	WHERE identification_service_area_id = $1
+		subscriptions.owner != $2`
+	rows, err := q.QueryContext(ctx, query, i.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var cell s2.CellID
+	i.Cells = s2.CellUnion{}
+	for rows.Next() {
+		if err := rows.Scan(&cell); err != nil {
+			return err
+		}
+		i.Cells = append(i.Cells, cell)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// PutIdentificationServiceArea creates the IdentificationServiceArea
+// identified by "id" and owned by "owner", affecting "cells" in the time
+// interval ["starts", "ends"].
+//
+// Returns the created/updated IdentificationServiceArea and all Subscriptions
+// affected by the put.
+func (c *Store) InsertISA(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error) {
 	const (
-		subscriptionQuery = `
-		INSERT INTO
-			identification_service_areas
-		VALUES
-			($1, $2, $3, $4, $5, transaction_timestamp())
-		RETURNING
-			*`
-		subscriptionCellQuery = `
-		INSERT INTO
-			cells_identification_service_areas
-		VALUES
-			($1, $2, $3, transaction_timestamp())
-		`
+		subscriptionsQuery = `
+		 SELECT
+				subscriptions.*
+			FROM
+				subscriptions
+			LEFT JOIN 
+				(SELECT DISTINCT subscription_id FROM cells_subscriptions WHERE cell_id = ANY($1))
+			AS
+				unique_subscription_ids
+			ON
+				subscriptions.id = unique_subscription_ids.subscription_id
+			WHERE
+				subscriptions.owner != $2`
 	)
 
-	isar := identificationServiceAreaRow{
-		id:    serviceArea.GetId(),
-		owner: serviceArea.GetOwner(),
-		url:   serviceArea.GetUrl(),
-	}
-
-	starts, err := ptypes.Timestamp(serviceArea.GetExtents().GetTimeStart())
+	tx, err := c.Begin()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	isar.StartTime = starts
 
-	ends, err := ptypes.Timestamp(serviceArea.GetExtents().GetTimeEnd())
+	if err := c.pushISA(ctx, tx, isa); err != nil {
+		return nil, nil, multierr.Combine(err, tx.Rollback())
+	}
+
+	// TODO(steeling) implement removing old cells
+	subscriptions, err := c.fetchSubscriptions(ctx, tx, subscriptionsQuery, pq.Array(isa.Cells), isa.Owner)
 	if err != nil {
-		return nil, err
+		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
-	isar.EndTime = ends
-
-	tx, err := s.Begin()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := isar.scan(tx.QueryRowContext(
-		ctx,
-		subscriptionQuery,
-		isar.id,
-		isar.owner,
-		isar.url,
-		isar.StartTime,
-		isar.EndTime,
-	)); err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-
-	for _, cell := range cells {
-		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), isar.id); err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-	}
-
-	result := &dspb.IdentificationServiceArea{
-		Id:         isar.id,
-		Owner:      isar.owner,
-		FlightsUrl: isar.url,
-	}
-
-	ts, err := ptypes.TimestampProto(isar.StartTime)
-	if err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-	result.Extents = &dspb.Volume4D{
-		SpatialVolume: serviceArea.GetExtents().GetSpatialVolume(),
-		TimeStart:     ts,
-	}
-
-	ts, err = ptypes.TimestampProto(isar.EndTime)
-	if err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-	result.Extents.TimeEnd = ts
 
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return result, err
+	return isa, subscriptions, nil
 }
 
 // DeleteIdentificationServiceArea deletes the IdentificationServiceArea identified by "id" and owned by "owner".
 // Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
-func (c *crISAStore) Delete(ctx context.Context, id string, owner string) (*dspb.IdentificationServiceArea, []*dspb.SubscriberToNotify, error) {
+func (c *Store) DeleteISA(ctx context.Context, id string, owner, version string) (*models.IdentificationServiceArea, []*models.Subscription, error) {
 	const (
-		getAffectedCellsAndSubscriptions = `
-			SELECT
-				cells_identification_service_areas.cell_id,
-				affected_subscriptions.subscription_id
-			FROM
-				cells_identification_service_areas
-			LEFT JOIN
-				(SELECT DISTINCT cell_id, subscription_id FROM cells_subscriptions)
-			AS
-				affected_subscriptions
-			ON
-				affected_subscriptions.cell_id = cells_identification_service_areas.cell_id
-			WHERE
-				cells_identification_service_areas.identification_service_area_id = $1
-		`
-		getSubscriptionDetailsForAffectedCells = `
-			SELECT
-				id, url, notification_index
+		subscriptionsQuery = `
+		 SELECT
+				subscriptions.*
 			FROM
 				subscriptions
+			LEFT JOIN 
+				(SELECT DISTINCT subscription_id FROM cells_subscriptions WHERE cell_id = ANY($1))
+			AS
+				unique_subscription_ids
+			ON
+				subscriptions.id = unique_subscription_ids.subscription_id
 			WHERE
-				id = ANY($1)
-			AND
-				owner != $2
-			AND
-				begins_at IS NULL OR transaction_timestamp() >= begins_at
-			AND
-				expires_at IS NULL OR transaction_timestamp() <= expires_at
-		`
-		deleteIdentificationServiceAreaQuery = `
+				subscriptions.owner != $2`
+		deleteQuery = `
 			DELETE FROM
 				identification_service_areas
 			WHERE
@@ -236,81 +221,38 @@ func (c *crISAStore) Delete(ctx context.Context, id string, owner string) (*dspb
 		`
 	)
 
-	tx, err := s.Begin()
+	tx, err := c.Begin()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var (
-		cells         []int64
-		subscriptions []string
-		cell          int64
-		subscription  string
-	)
-
-	rows, err := tx.QueryContext(ctx, getAffectedCellsAndSubscriptions, id)
-	if err != nil {
+	// We fetch to know whether to return a concurrency error, or a not found error
+	old, err := c.fetchISAByIDAndOwner(ctx, tx, id, owner)
+	switch {
+	case err == sql.ErrNoRows: // Return a 404 here.
+		return nil, nil, multierr.Combine(err, tx.Rollback())
+	case err != nil:
+		return nil, nil, multierr.Combine(err, tx.Rollback())
+	case version != "" && version != old.Version():
+		err := fmt.Errorf("version mismatch for subscription %s", id)
 		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		if err := rows.Scan(&cell, &subscription); err != nil {
-			return nil, nil, multierr.Combine(err, tx.Rollback())
-		}
-		cells = append(cells, cell)
-		subscriptions = append(subscriptions, subscription)
-	}
-	if err := rows.Err(); err != nil {
+	if err := c.populateISACells(ctx, tx, old); err != nil {
 		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	isar := &identificationServiceAreaRow{}
-	if err := isar.scan(tx.QueryRowContext(ctx, deleteIdentificationServiceAreaQuery, id, owner)); err != nil {
-		// This error condition will be triggered if the owner does not match.
-		multierr.Combine(err, tx.Rollback())
-	}
-
-	var (
-		subscribers []*models.Subscription
-		subscriber  *models.Subscription
-	)
-
-	rows, err = tx.QueryContext(ctx, getSubscriptionDetailsForAffectedCells, pq.Array(subscriptions), owner)
-	if err != nil {
-		return nil, nil, multierr.Combine(err, tx.Rollback())
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		if err := rows.Scan(&subscriber.id, &subscriber.url, &subscriber.notificationIndex); err != nil {
-			return nil, nil, multierr.Combine(err, tx.Rollback())
-		}
-
-		subscribers = append(subscribers, subscriber)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, nil, multierr.Combine(err, tx.Rollback())
-	}
-
-	isa, err := isar.toProtobuf()
+	subscriptions, err := c.fetchSubscriptions(ctx, tx, subscriptionsQuery, pq.Array(old.Cells), owner)
 	if err != nil {
 		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	subscribersToNotify := []*dspb.SubscriberToNotify{}
-	for _, subscriber := range subscribers {
-		subscriberToNotify, err := subscriber.toProtobuf()
-		if err != nil {
-			return nil, nil, multierr.Combine(err, tx.Rollback())
-		}
-		subscribersToNotify = append(subscribersToNotify, subscriberToNotify)
+	if _, err := tx.ExecContext(ctx, deleteQuery, id, owner); err != nil {
+		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, nil, err
 	}
 
-	return isa, subscribersToNotify, nil
+	return old, subscriptions, nil
 }
