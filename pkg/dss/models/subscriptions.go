@@ -2,7 +2,9 @@ package models
 
 import (
 	"context"
-	"errors"
+	"time"
+
+	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
@@ -23,7 +25,7 @@ type SubscriptionStore interface {
 	Put(ctx context.Context, s *Subscription) (*Subscription, error)
 
 	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	Search(ctx context.Context, cells s2.CellUnion, owner string) (*Subscription, error)
+	Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*Subscription, error)
 }
 
 // func GetSubscriptionStore() SubscriptionStore
@@ -33,7 +35,7 @@ var ActiveSubscriptionStore SubscriptionStore
 type Subscription struct {
 	// Embed the proto
 	// Unfortunately some types don't implement scanner/valuer, so we add placeholders below.
-	Id                string
+	ID                string
 	Url               string
 	NotificationIndex int
 	Owner             string
@@ -41,84 +43,76 @@ type Subscription struct {
 	// TODO(steeling): abstract nullTime away from models.
 	BeginsAt   nullTime
 	ExpiresAt  nullTime
-	UpdatedAt  nullTime
-	AltitudeHi float
-	AltitudeLo float
+	UpdatedAt  time.Time
+	AltitudeHi float32
+	AltitudeLo float32
 }
 
-// Apply s2 on top of s.
-func (s *Subscription) inherit(s2 *Subscription) error {
-	if s.id != s2.id {
-		return errors.New("ids do not match")
+// Apply fields from s2 onto s, preferring any fields set in s2.
+func (s *Subscription) Apply(s2 *Subscription) *Subscription {
+	new := *s
+	if s2.Url == "" {
+		new.Url = s2.Url
 	}
-	if s.owner != s2.owner {
-		return errors.New("owners do not match")
+	if s2.Cells != nil {
+		new.Cells = s2.Cells
 	}
-	if s.url == "" {
-		s.url = s2.url
+	if s2.BeginsAt.Valid {
+		new.BeginsAt = s2.BeginsAt
 	}
-	if s.cells == nil {
-		s.cells = s2.cells
+	if s2.ExpiresAt.Valid {
+		new.ExpiresAt = s2.ExpiresAt
 	}
-	if s.loop == nil {
-		s.loop = s2.loop
+	if !s2.UpdatedAt.IsZero() {
+		new.UpdatedAt = s2.UpdatedAt
 	}
-	if !s.beginsAt.Valid {
-		s.beginsAt = s2.beginsAt
+	if s2.AltitudeHi != 0 {
+		new.AltitudeHi = s2.AltitudeHi
 	}
-	if !s.expiresAt.Valid {
-		s.expiresAt = s2.expiresAt
+	// TODO(steeling) what if the update is to make it 0, we need an omitempty, pointer, or some other type.
+	if s2.AltitudeLo != 0 {
+		new.AltitudeLo = s2.AltitudeLo
 	}
-	if !s.updatedAt.Valid {
-		s.updatedAt = s2.updatedAt
-	}
-	if s.altitude_hi == 0 {
-		s.altitude_hi = s2.altitude_hi
-	}
-	if s.altitude_lo == 0 {
-		s.altitude_lo = s2.altitude_lo
-	}
-	s.notificationIndex = old.notificationIndex
-	return nil
+	return &new
 }
 
 func (s *Subscription) ToNotifyProto() *dspb.SubscriberToNotify {
 	return &dspb.SubscriberToNotify{
-		Url: s.url,
+		Url: s.Url,
 		Subscriptions: []*dspb.SubscriptionState{
 			&dspb.SubscriptionState{
-				NotificationIndex: s.notificationIndex,
-				Subscription:      s.id,
+				NotificationIndex: int32(s.NotificationIndex),
+				Subscription:      s.ID,
 			},
 		},
 	}
 }
 
-func (s *Subscription) Version() error {
-	return timestampToVersionString(s.updatedAt)
+func (s *Subscription) Version() string {
+	return timestampToVersionString(s.UpdatedAt)
 }
 
-func (sr *subscriptionsRow) ToProto() (*dspb.Subscription, error) {
+func (s *Subscription) ToProto() (*dspb.Subscription, error) {
 	result := &dspb.Subscription{
-		Id:    s.id,
-		Owner: s.owner,
+		Id:    s.ID,
+		Owner: s.Owner,
 		Callbacks: &dspb.SubscriptionCallbacks{
-			IdentificationServiceAreaUrl: s.url,
+			IdentificationServiceAreaUrl: s.Url,
 		},
-		NotificationIndex: int32(s.notificationIndex),
+		NotificationIndex: int32(s.NotificationIndex),
 		Version:           s.Version(),
 	}
 
-	if sr.beginsAt.Valid {
-		ts, err := ptypes.TimestampProto(sr.beginsAt.Time)
+	if s.BeginsAt.Valid {
+		ts, err := ptypes.TimestampProto(s.BeginsAt.Time)
 		if err != nil {
 			return nil, err
 		}
 		result.Begins = ts
 	}
 
-	if sr.expiresAt.Valid {
-		ts, err := ptypes.TimestampProto(sr.expiresAt.Time)
+	if s.ExpiresAt.Valid {
+		ts, err := ptypes.TimestampProto(s.ExpiresAt.Time)
 		if err != nil {
 			return nil, err
 		}

@@ -2,13 +2,16 @@ package dss
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
+
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 )
 
@@ -59,7 +62,9 @@ func NewNilStore() Store {
 
 // Server implements dssproto.DiscoveryAndSynchronizationService.
 type Server struct {
-	Store Store
+	*sql.DB
+	scStore  models.SubscriptionStore
+	isaStore models.IdentificationServiceAreaStore
 }
 
 func (s *Server) AuthScopes() map[string][]string {
@@ -85,7 +90,7 @@ func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.
 		return nil, errors.New("missing owner from context")
 	}
 
-	isa, subscribers, err := s.Store.DeleteIdentificationServiceArea(ctx, req.GetId(), owner)
+	isa, subscribers, err := s.isaStore.Delete(ctx, req.GetId(), owner)
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
@@ -93,22 +98,38 @@ func (s *Server) DeleteIdentificationServiceArea(ctx context.Context, req *dspb.
 		return nil, err
 	}
 
+	p, err := isa.ToProto()
+	if err != nil {
+		return nil, err
+	}
+	sp := make([]*dspb.SubscriberToNotify, len(subscribers))
+	for i, _ := range subscribers {
+		sp[i], err = subscribers[i].ToNotifyProto()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &dspb.DeleteIdentificationServiceAreaResponse{
-		ServiceArea: isa,
-		Subscribers: subscribers,
+		ServiceArea: p,
+		Subscribers: sp,
 	}, nil
 }
 
 func (s *Server) DeleteSubscription(ctx context.Context, req *dspb.DeleteSubscriptionRequest) (*dspb.DeleteSubscriptionResponse, error) {
-	subscription, err := s.Store.DeleteSubscription(ctx, req.GetId(), req.GetVersion())
+	subscription, err := s.scStore.Delete(ctx, req.GetId(), req.GetVersion())
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
 		// just return a generic error indicating a request ID.
 		return nil, err
 	}
+	p, err := subscription.ToProto()
+	if err != nil {
+		return err
+	}
 	return &dspb.DeleteSubscriptionResponse{
-		Subscription: subscription,
+		Subscription: p,
 	}, nil
 }
 
@@ -175,7 +196,7 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 		return nil, err
 	}
 
-	subscriptions, err := s.Store.SearchSubscriptions(ctx, cu, owner)
+	subscriptions, err := s.scStore.Search(ctx, cu, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -186,15 +207,19 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 }
 
 func (s *Server) GetSubscription(ctx context.Context, req *dspb.GetSubscriptionRequest) (*dspb.GetSubscriptionResponse, error) {
-	subscription, err := s.Store.GetSubscription(ctx, req.GetId())
+	subscription, err := s.scStore.Get(ctx, req.GetId())
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
 		// just return a generic error indicating a request ID.
 		return nil, err
 	}
+	p, err := subscription.ToProto()
+	if err != nil {
+		return err
+	}
 	return &dspb.GetSubscriptionResponse{
-		Subscription: subscription,
+		Subscription: p,
 	}, nil
 }
 

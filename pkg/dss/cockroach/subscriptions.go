@@ -9,49 +9,20 @@ import (
 	"github.com/golang/geo/s2"
 	"github.com/lib/pq"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
-	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"go.uber.org/multierr"
 )
-
-// Legacy code
-
-type subscriberRow struct {
-	id                string
-	url               string
-	notificationIndex int32
-}
-
-func (sr *subscriberRow) scan(scanner scanner) error {
-	return scanner.Scan(
-		&sr.url,
-		&sr.notificationIndex,
-	)
-}
-
-func (sr *subscriberRow) toProtobuf() (*dspb.SubscriberToNotify, error) {
-	return &dspb.SubscriberToNotify{
-		Url: sr.url,
-		Subscriptions: []*dspb.SubscriptionState{
-			&dspb.SubscriptionState{
-				NotificationIndex: sr.notificationIndex,
-				Subscription:      sr.id,
-			},
-		},
-	}, nil
-}
-
-// End legacy code
 
 type crSubscriptionStore struct {
 	*sql.DB
 }
 
 type queryable interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (Result, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
-func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.Post, error) {
+func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.Subscription, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -73,7 +44,7 @@ func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query stri
 		if err != nil {
 			return nil, err
 		}
-		payload = append(payload, data)
+		payload = append(payload, s)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -90,7 +61,7 @@ func (c *crSubscriptionStore) fetchByID(ctx context.Context, q queryable, id str
 			id = $1`
 	s := new(models.Subscription)
 
-	err := q.QueryRowContext(ctx, query, args...).Scan(
+	err := q.QueryRowContext(ctx, query, id).Scan(
 		&s.ID,
 		&s.Owner,
 		&s.Url,
@@ -104,15 +75,13 @@ func (c *crSubscriptionStore) fetchByID(ctx context.Context, q queryable, id str
 	return s, nil
 }
 
-func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *model.Subscription) error {
+func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *models.Subscription) error {
 	const (
 		upsertQuery = `
 		UPSERT INTO
 		  subscriptions
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())
-		RETURNING
-			*`
+			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())`
 		subscriptionCellQuery = `
 		UPSERT INTO
 			cells_subscriptions
@@ -120,7 +89,7 @@ func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *model.Su
 			($1, $2, $3, transaction_timestamp())
 		`
 	)
-	if err := q.ExecContext(
+	if _, err := q.ExecContext(
 		ctx,
 		upsertQuery,
 		s.ID,
@@ -134,11 +103,12 @@ func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *model.Su
 	}
 
 	// TODO(steeling) we also need to delete any leftover cells.
-	for _, cell := range cells {
-		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), sr.id); err != nil {
+	for _, cell := range s.Cells {
+		if _, err := q.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), s.ID); err != nil {
 			return err
 		}
 	}
+	return nil
 }
 
 // Get returns the subscription identified by "id".
@@ -150,11 +120,11 @@ func (c *crSubscriptionStore) Get(ctx context.Context, id string) (*models.Subsc
 // the resulting subscription including its ID.
 func (c *crSubscriptionStore) Insert(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
 
-	tx, err := s.Begin()
+	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}
-	_, err = c.fetchByID(ctx, tx, subscription.Id)
+	_, err = c.fetchByID(ctx, tx, s.ID)
 	if err == nil {
 		// TODO(steeling) fix errors
 		return nil, errors.New("already exists")
@@ -163,11 +133,9 @@ func (c *crSubscriptionStore) Insert(ctx context.Context, s *models.Subscription
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	err := c.push(ctx, tx, s)
-	if err != nil {
+	if err := c.push(ctx, tx, s); err != nil {
 		return nil, err
 	}
-
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -176,7 +144,7 @@ func (c *crSubscriptionStore) Insert(ctx context.Context, s *models.Subscription
 
 // updatesSubscription updates the subscription  and returns
 // the resulting subscription including its ID.
-func (c *crSubscriptionStore) Update(ctx context.Context, subscription *dspb.Subscription, cells s2.CellUnion) (*dspb.Subscription, error) {
+func (c *crSubscriptionStore) Update(ctx context.Context, s *models.Subscription, cells s2.CellUnion) (*models.Subscription, error) {
 	const (
 		getQuery = `
 		SELECT * FROM
@@ -185,38 +153,35 @@ func (c *crSubscriptionStore) Update(ctx context.Context, subscription *dspb.Sub
 			id = $1`
 	)
 
-	tx, err := s.Begin()
+	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}
 
-	old, err = c.fetchByID(ctx, tx, subscription.Id)
+	old, err := c.fetchByID(ctx, tx, s.ID)
 	switch {
 	case err == sql.ErrNoRows: // Return a 404 here.
 		return nil, multierr.Combine(err, tx.Rollback())
 	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
-	case s.Version() != "" && !s.Version() != old.Version():
-		err := fmt.Errorf("version mismatch for subscription %s", subscription.Id)
+	case s.Version() != "" && s.Version() != old.Version():
+		err := fmt.Errorf("version mismatch for subscription %s", s.ID)
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	new := old.applyProtobuf(s)
-
-	err := c.push(ctx, tx, new)
-	if err != nil {
+	if err := c.push(ctx, tx, old.Apply(s)); err != nil {
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return result, nil
+	return s, nil
 }
 
 // DeleteSubscription deletes the subscription identified by "id" and
 // returns the deleted subscription.
-func (s *Store) Delete(ctx context.Context, id, version string) (*dspb.Subscription, error) {
+func (c *crSubscriptionStore) Delete(ctx context.Context, id, version string) (*models.Subscription, error) {
 	const (
 		query = `
 		DELETE FROM
@@ -225,24 +190,24 @@ func (s *Store) Delete(ctx context.Context, id, version string) (*dspb.Subscript
 			id = $1`
 	)
 
-	tx, err := s.Begin()
+	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}
 
 	// We fetch to know whether to return a concurrency error, or a not found error
-	old, err = c.fetchByID(ctx, tx, subscription.Id)
+	old, err := c.fetchByID(ctx, tx, id)
 	switch {
 	case err == sql.ErrNoRows: // Return a 404 here.
 		return nil, multierr.Combine(err, tx.Rollback())
 	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
-	case s.Version() != "" && !s.Version() != old.Version():
-		err := fmt.Errorf("version mismatch for subscription %s", subscription.Id)
+	case version != "" && version != old.Version():
+		err := fmt.Errorf("version mismatch for subscription %s", id)
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	if err := tx.ExecContext(ctx, blindQuery, id); err != nil {
+	if _, err := tx.ExecContext(ctx, query, id); err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
@@ -250,11 +215,11 @@ func (s *Store) Delete(ctx context.Context, id, version string) (*dspb.Subscript
 		return nil, err
 	}
 
-	return s, nil
+	return old, nil
 }
 
 // SearchSubscriptions returns all subscriptions in "cells".
-func (c *crSubscriptionStore) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error) {
+func (c *crSubscriptionStore) Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error) {
 	const (
 		query = `
 			SELECT
@@ -275,7 +240,7 @@ func (c *crSubscriptionStore) SearchSubscriptions(ctx context.Context, cells s2.
 		return nil, errors.New("missing cell IDs for query")
 	}
 
-	tx, err := s.Begin()
+	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}

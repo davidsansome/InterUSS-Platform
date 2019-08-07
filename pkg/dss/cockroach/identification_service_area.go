@@ -2,15 +2,110 @@ package cockroach
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/lib/pq"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"go.uber.org/multierr"
 )
 
-func (s *Store) insertIdentificationServiceAreaUnchecked(ctx context.Context, serviceArea *dspb.IdentificationServiceArea, cells s2.CellUnion) (*dspb.IdentificationServiceArea, error) {
+type crISAStore struct {
+	*sql.DB
+}
+
+func (c *crISAStore) fetch(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.IdentificationServiceArea, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payload []*models.IdentificationServiceArea
+	for rows.Next() {
+		i := new(models.IdentificationServiceArea)
+
+		err := rows.Scan(
+			&i.ID,
+			&i.Owner,
+			&i.Url,
+			&i.NotificationIndex,
+			&i.BeginsAt,
+			&i.ExpiresAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		payload = append(payload, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (c *crISAStore) fetchByID(ctx context.Context, q queryable, id string) (*models.IdentificationServiceArea, error) {
+	// TODO(steeling) don't fetch by *
+	const query = `
+		SELECT * FROM
+			identification_service_areas
+		WHERE
+			id = $1`
+	s := new(models.IdentificationServiceArea)
+
+	err := q.QueryRowContext(ctx, query, id).Scan(
+		&i.ID,
+		&i.Owner,
+		&i.Url,
+		&i.NotificationIndex,
+		&i.BeginsAt,
+		&i.ExpiresAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return i, nil
+}
+
+func (c *crSubscriptionStore) push(ctx context.Context, tx *sql.Tx, i *models.IdentificationServiceArea) error {
+	const (
+		upsertQuery = `
+		UPSERT INTO
+		  subscriptions
+		VALUES
+			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())`
+		subscriptionCellQuery = `
+		UPSERT INTO
+			cells_subscriptions
+		VALUES
+			($1, $2, $3, transaction_timestamp())
+		`
+	)
+	if _, err := tx.ExecContext(
+		ctx,
+		upsertQuery,
+		i.ID,
+		i.Owner,
+		i.Url,
+		i.NotificationIndex,
+		i.BeginsAt,
+		i.ExpiresAt,
+	); err != nil {
+		return err
+	}
+
+	// TODO(steeling) we also need to delete any leftover cells.
+	for _, cell := range s.Cells {
+		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), s.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *crISAStore) Insert(ctx context.Context, serviceArea *dspb.IdentificationServiceArea, cells s2.CellUnion) (*dspb.IdentificationServiceArea, error) {
 	const (
 		subscriptionQuery = `
 		INSERT INTO
@@ -98,7 +193,7 @@ func (s *Store) insertIdentificationServiceAreaUnchecked(ctx context.Context, se
 
 // DeleteIdentificationServiceArea deletes the IdentificationServiceArea identified by "id" and owned by "owner".
 // Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
-func (s *Store) DeleteIdentificationServiceArea(ctx context.Context, id string, owner string) (*dspb.IdentificationServiceArea, []*dspb.SubscriberToNotify, error) {
+func (c *crISAStore) Delete(ctx context.Context, id string, owner string) (*dspb.IdentificationServiceArea, []*dspb.SubscriberToNotify, error) {
 	const (
 		getAffectedCellsAndSubscriptions = `
 			SELECT
@@ -177,8 +272,8 @@ func (s *Store) DeleteIdentificationServiceArea(ctx context.Context, id string, 
 	}
 
 	var (
-		subscribers []subscriberRow
-		subscriber  subscriberRow
+		subscribers []*models.Subscription
+		subscriber  *models.Subscription
 	)
 
 	rows, err = tx.QueryContext(ctx, getSubscriptionDetailsForAffectedCells, pq.Array(subscriptions), owner)

@@ -10,6 +10,12 @@ import (
 	// Pull in the postgres database driver
 )
 
+type queryable interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+}
+
 type scanner interface {
 	Scan(fields ...interface{}) error
 }
@@ -64,10 +70,6 @@ func versionStringToTimestamp(s string) (time.Time, error) {
 
 func timestampToVersionString(t time.Time) string {
 	return strconv.FormatUint(uint64(t.UnixNano()), versionBase)
-}
-
-func (sr *subscriptionsRow) versionOK(version string) bool {
-	return version == "" || version == timestampToVersionString(sr.updatedAt)
 }
 
 // Store is an implementation of dss.Store using
