@@ -7,83 +7,11 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-
-	"github.com/golang/protobuf/ptypes" // Pull in the postgres database driver
-	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
+	// Pull in the postgres database driver
 )
 
 type scanner interface {
 	Scan(fields ...interface{}) error
-}
-
-type subscriberRow struct {
-	id                string
-	url               string
-	notificationIndex int32
-}
-
-func (sr *subscriberRow) scan(scanner scanner) error {
-	return scanner.Scan(
-		&sr.url,
-		&sr.notificationIndex,
-	)
-}
-
-func (sr *subscriberRow) toProtobuf() (*dspb.SubscriberToNotify, error) {
-	return &dspb.SubscriberToNotify{
-		Url: sr.url,
-		Subscriptions: []*dspb.SubscriptionState{
-			&dspb.SubscriptionState{
-				NotificationIndex: sr.notificationIndex,
-				Subscription:      sr.id,
-			},
-		},
-	}, nil
-}
-
-type identificationServiceAreaRow struct {
-	id        string
-	owner     string
-	url       string
-	startsAt  time.Time
-	endsAt    time.Time
-	updatedAt time.Time
-}
-
-func (isar *identificationServiceAreaRow) scan(scanner scanner) error {
-	return scanner.Scan(
-		&isar.id,
-		&isar.owner,
-		&isar.url,
-		&isar.startsAt,
-		&isar.endsAt,
-		&isar.updatedAt,
-	)
-}
-
-func (isar *identificationServiceAreaRow) toProtobuf() (*dspb.IdentificationServiceArea, error) {
-	result := &dspb.IdentificationServiceArea{
-		Id:         isar.id,
-		Owner:      isar.owner,
-		FlightsUrl: isar.url,
-		Version:    strconv.FormatInt(isar.updatedAt.UnixNano(), 10),
-	}
-
-	ts, err := ptypes.TimestampProto(isar.startsAt)
-	if err != nil {
-		return nil, err
-	}
-	result.Extents = &dspb.Volume4D{
-		TimeStart: ts,
-	}
-
-	ts, err = ptypes.TimestampProto(isar.endsAt)
-	if err != nil {
-		return nil, err
-	}
-	result.Extents.TimeEnd = ts
-
-	return result, nil
 }
 
 // Convert updatedAt to a string, why not make it smaller
@@ -163,9 +91,7 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 		id UUID PRIMARY KEY,
 		owner STRING NOT NULL,
 		url STRING NOT NULL,
-		types_filter STRING,
 		notification_index INT4 DEFAULT 0,
-		last_used_at TIMESTAMPTZ,
 		begins_at TIMESTAMPTZ,
 		expires_at TIMESTAMPTZ,
 		updated_at TIMESTAMPTZ NOT NULL,

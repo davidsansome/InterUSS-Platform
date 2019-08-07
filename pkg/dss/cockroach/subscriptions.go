@@ -5,168 +5,108 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/golang/geo/s2"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/lib/pq"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 	"go.uber.org/multierr"
 )
 
-type subscriptionsRow struct {
+// Legacy code
+
+type subscriberRow struct {
 	id                string
-	owner             string
 	url               string
-	typesFilter       sql.NullString
 	notificationIndex int32
-	lastUsedAt        pq.NullTime
-	beginsAt          pq.NullTime
-	expiresAt         pq.NullTime
-	updatedAt         time.Time
 }
 
-func (sr *subscriptionsRow) scan(scanner scanner) error {
-	return scanner.Scan(&sr.id,
-		&sr.owner,
+func (sr *subscriberRow) scan(scanner scanner) error {
+	return scanner.Scan(
 		&sr.url,
-		&sr.typesFilter,
 		&sr.notificationIndex,
-		&sr.lastUsedAt,
-		&sr.beginsAt,
-		&sr.expiresAt,
-		&sr.updatedAt,
 	)
 }
 
-func (sr *subscriptionsRow) toProtobuf() (*dspb.Subscription, error) {
-	result := &dspb.Subscription{
-		Id:    sr.id,
-		Owner: sr.owner,
-		Callbacks: &dspb.SubscriptionCallbacks{
-			IdentificationServiceAreaUrl: sr.url,
+func (sr *subscriberRow) toProtobuf() (*dspb.SubscriberToNotify, error) {
+	return &dspb.SubscriberToNotify{
+		Url: sr.url,
+		Subscriptions: []*dspb.SubscriptionState{
+			&dspb.SubscriptionState{
+				NotificationIndex: sr.notificationIndex,
+				Subscription:      sr.id,
+			},
 		},
-		NotificationIndex: int32(sr.notificationIndex),
-		Version:           timestampToVersionString(sr.updatedAt),
-	}
+	}, nil
+}
 
-	if sr.beginsAt.Valid {
-		ts, err := ptypes.TimestampProto(sr.beginsAt.Time)
+// End legacy code
+
+type crSubscriptionStore struct {
+	*sql.DB
+}
+
+type queryable interface {
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (Result, error)
+}
+
+func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.Post, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payload []*models.Subscription
+	for rows.Next() {
+		s := new(models.Subscription)
+
+		err := rows.Scan(
+			&s.ID,
+			&s.Owner,
+			&s.Url,
+			&s.NotificationIndex,
+			&s.BeginsAt,
+			&s.ExpiresAt,
+		)
 		if err != nil {
 			return nil, err
 		}
-		result.Begins = ts
+		payload = append(payload, data)
 	}
-
-	if sr.expiresAt.Valid {
-		ts, err := ptypes.TimestampProto(sr.expiresAt.Time)
-		if err != nil {
-			return nil, err
-		}
-		result.Expires = ts
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-
-	return result, nil
+	return payload, nil
 }
 
-// from or apply
-func (sr *subscriptionsRow) applyProtobuf(subscription *dspb.Subscription) error {
-	if subscription.Id != "" {
-		sr.id = subscription.Id
-	}
-
-	if subscription.Owner != "" {
-		sr.owner = subscription.Owner
-	}
-	if subscription.Callbacks.GetIdentificationServiceAreaUrl() != "" {
-		sr.url = subscription.Callbacks.GetIdentificationServiceAreaUrl()
-	}
-	if ts := subscription.GetBegins(); ts != nil {
-		begins, err := ptypes.Timestamp(ts)
-		if err != nil {
-			return err
-		}
-		sr.beginsAt.Time = begins
-		sr.beginsAt.Valid = true
-	}
-
-	if ts := subscription.GetExpires(); ts != nil {
-		expires, err := ptypes.Timestamp(ts)
-		if err != nil {
-			return err
-		}
-		sr.expiresAt.Time = expires
-		sr.expiresAt.Valid = true
-	}
-	return nil
-}
-
-// insertSubscription inserts subscription into the store and returns
-// the resulting subscription including its ID.
-func (s *Store) insertSubscription(ctx context.Context, subscription *dspb.Subscription, cells s2.CellUnion) (*dspb.Subscription, error) {
-	const (
-		insertQuery = `
-		INSERT INTO
+func (c *crSubscriptionStore) fetchByID(ctx context.Context, q queryable, id string) (*models.Subscription, error) {
+	// TODO(steeling) don't fetch by *
+	const query = `
+		SELECT * FROM
 			subscriptions
-		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())
-		RETURNING
-			*`
-		subscriptionCellQuery = `
-		INSERT INTO
-			cells_subscriptions
-		VALUES
-			($1, $2, $3, transaction_timestamp())
-		`
+		WHERE
+			id = $1`
+	s := new(models.Subscription)
+
+	err := q.QueryRowContext(ctx, query, args...).Scan(
+		&s.ID,
+		&s.Owner,
+		&s.Url,
+		&s.NotificationIndex,
+		&s.BeginsAt,
+		&s.ExpiresAt,
 	)
-
-	tx, err := s.Begin()
 	if err != nil {
 		return nil, err
 	}
-
-	sr := &subscriptionsRow{}
-
-	sr.applyProtobuf(subscription)
-
-	if err := sr.scan(tx.QueryRowContext(
-		ctx,
-		insertQuery,
-		sr.id,
-		sr.owner,
-		sr.url,
-		sr.typesFilter,
-		sr.notificationIndex,
-		sr.lastUsedAt,
-		sr.beginsAt,
-		sr.expiresAt,
-	)); err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-
-	for _, cell := range cells {
-		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), sr.id); err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-	}
-
-	result, err := sr.toProtobuf()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return s, nil
 }
 
-// updatesSubscription updates the subscription  and returns
-// the resulting subscription including its ID.
-func (s *Store) updateSubscription(ctx context.Context, subscription *dspb.Subscription, cells s2.CellUnion) (*dspb.Subscription, error) {
+func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *model.Subscription) error {
 	const (
-		// We use an upsert so we don't have to specify the column
-		updateQuery = `
+		upsertQuery = `
 		UPSERT INTO
 		  subscriptions
 		VALUES
@@ -179,6 +119,65 @@ func (s *Store) updateSubscription(ctx context.Context, subscription *dspb.Subsc
 		VALUES
 			($1, $2, $3, transaction_timestamp())
 		`
+	)
+	if err := q.ExecContext(
+		ctx,
+		upsertQuery,
+		s.ID,
+		s.Owner,
+		s.Url,
+		s.NotificationIndex,
+		s.BeginsAt,
+		s.ExpiresAt,
+	); err != nil {
+		return err
+	}
+
+	// TODO(steeling) we also need to delete any leftover cells.
+	for _, cell := range cells {
+		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), sr.id); err != nil {
+			return err
+		}
+	}
+}
+
+// Get returns the subscription identified by "id".
+func (c *crSubscriptionStore) Get(ctx context.Context, id string) (*models.Subscription, error) {
+	return c.fetchByID(ctx, c.DB, id)
+}
+
+// Insert inserts subscription into the store and returns
+// the resulting subscription including its ID.
+func (c *crSubscriptionStore) Insert(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
+
+	tx, err := s.Begin()
+	if err != nil {
+		return nil, err
+	}
+	_, err = c.fetchByID(ctx, tx, subscription.Id)
+	if err == nil {
+		// TODO(steeling) fix errors
+		return nil, errors.New("already exists")
+	}
+	if err != sql.ErrNoRows {
+		return nil, multierr.Combine(err, tx.Rollback())
+	}
+
+	err := c.push(ctx, tx, s)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// updatesSubscription updates the subscription  and returns
+// the resulting subscription including its ID.
+func (c *crSubscriptionStore) Update(ctx context.Context, subscription *dspb.Subscription, cells s2.CellUnion) (*dspb.Subscription, error) {
+	const (
 		getQuery = `
 		SELECT * FROM
 			subscriptions
@@ -191,45 +190,20 @@ func (s *Store) updateSubscription(ctx context.Context, subscription *dspb.Subsc
 		return nil, err
 	}
 
-	sr := &subscriptionsRow{}
-
-	err = sr.scan(tx.QueryRowContext(ctx, getQuery, subscription.Id))
-
+	old, err = c.fetchByID(ctx, tx, subscription.Id)
 	switch {
-	case err == sql.ErrNoRows: // Do nothing here.
+	case err == sql.ErrNoRows: // Return a 404 here.
 		return nil, multierr.Combine(err, tx.Rollback())
 	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
-	case !sr.versionOK(subscription.Version):
+	case s.Version() != "" && !s.Version() != old.Version():
 		err := fmt.Errorf("version mismatch for subscription %s", subscription.Id)
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	sr.applyProtobuf(subscription)
+	new := old.applyProtobuf(s)
 
-	if err := sr.scan(tx.QueryRowContext(
-		ctx,
-		updateQuery,
-		sr.id,
-		sr.owner,
-		sr.url,
-		sr.typesFilter,
-		sr.notificationIndex,
-		sr.lastUsedAt,
-		sr.beginsAt,
-		sr.expiresAt,
-	)); err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-
-	// TODO(steeling) we also need to delete any leftover cells.
-	for _, cell := range cells {
-		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), sr.id); err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-	}
-
-	result, err := sr.toProtobuf()
+	err := c.push(ctx, tx, new)
 	if err != nil {
 		return nil, err
 	}
@@ -240,11 +214,12 @@ func (s *Store) updateSubscription(ctx context.Context, subscription *dspb.Subsc
 	return result, nil
 }
 
-// GetSubscription returns the subscription identified by "id".
-func (s *Store) GetSubscription(ctx context.Context, id string) (*dspb.Subscription, error) {
+// DeleteSubscription deletes the subscription identified by "id" and
+// returns the deleted subscription.
+func (s *Store) Delete(ctx context.Context, id, version string) (*dspb.Subscription, error) {
 	const (
-		subscriptionQuery = `
-		SELECT * FROM
+		query = `
+		DELETE FROM
 			subscriptions
 		WHERE
 			id = $1`
@@ -255,69 +230,19 @@ func (s *Store) GetSubscription(ctx context.Context, id string) (*dspb.Subscript
 		return nil, err
 	}
 
-	sr := &subscriptionsRow{}
-
-	if err := sr.scan(tx.QueryRowContext(ctx, subscriptionQuery, id)); err != nil {
+	// We fetch to know whether to return a concurrency error, or a not found error
+	old, err = c.fetchByID(ctx, tx, subscription.Id)
+	switch {
+	case err == sql.ErrNoRows: // Return a 404 here.
+		return nil, multierr.Combine(err, tx.Rollback())
+	case err != nil:
+		return nil, multierr.Combine(err, tx.Rollback())
+	case s.Version() != "" && !s.Version() != old.Version():
+		err := fmt.Errorf("version mismatch for subscription %s", subscription.Id)
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	result, err := sr.toProtobuf()
-	if err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// DeleteSubscription deletes the subscription identified by "id" and
-// returns the deleted subscription.
-func (s *Store) DeleteSubscription(ctx context.Context, id, version string) (*dspb.Subscription, error) {
-	const (
-		blindQuery = `
-		DELETE FROM
-			subscriptions
-		WHERE
-			id = $1
-		RETURNING
-			*`
-
-		idempotentQuery = `
-		DELETE FROM
-			subscriptions
-		WHERE
-			id = $1
-			AND updated_at = $2
-		RETURNING
-			*`
-	)
-
-	tx, err := s.Begin()
-	if err != nil {
-		return nil, err
-	}
-
-	sr := &subscriptionsRow{}
-	switch version {
-	case "":
-		if err := sr.scan(tx.QueryRowContext(ctx, blindQuery, id)); err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-	default:
-		updatedAt, err := versionStringToTimestamp(version)
-		if err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-		if err := sr.scan(tx.QueryRowContext(ctx, idempotentQuery, id, updatedAt)); err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-	}
-
-	result, err := sr.toProtobuf()
-	if err != nil {
+	if err := tx.ExecContext(ctx, blindQuery, id); err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
@@ -325,13 +250,13 @@ func (s *Store) DeleteSubscription(ctx context.Context, id, version string) (*ds
 		return nil, err
 	}
 
-	return result, nil
+	return s, nil
 }
 
 // SearchSubscriptions returns all subscriptions in "cells".
-func (s *Store) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*dspb.Subscription, error) {
+func (c *crSubscriptionStore) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error) {
 	const (
-		subscriptionsInCellsQuery = `
+		query = `
 			SELECT
 				subscriptions.*
 			FROM
@@ -355,30 +280,8 @@ func (s *Store) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, own
 		return nil, err
 	}
 
-	rows, err := tx.QueryContext(ctx, subscriptionsInCellsQuery, pq.Array(cells), owner)
+	subscriptions, err := c.fetch(ctx, tx, query, pq.Array(cells), owner)
 	if err != nil {
-		return nil, multierr.Combine(err, tx.Rollback())
-	}
-	defer rows.Close()
-
-	var (
-		row    = &subscriptionsRow{}
-		result = []*dspb.Subscription{}
-	)
-
-	for rows.Next() {
-		if err := row.scan(rows); err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-		pb, err := row.toProtobuf()
-		if err != nil {
-			return nil, multierr.Combine(err, tx.Rollback())
-		}
-
-		result = append(result, pb)
-	}
-
-	if err := rows.Err(); err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
@@ -386,5 +289,5 @@ func (s *Store) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, own
 		return nil, err
 	}
 
-	return result, nil
+	return subscriptions, nil
 }
