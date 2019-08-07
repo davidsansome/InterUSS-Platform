@@ -125,20 +125,20 @@ func (c *crISAStore) Insert(ctx context.Context, serviceArea *dspb.Identificatio
 	isar := identificationServiceAreaRow{
 		id:    serviceArea.GetId(),
 		owner: serviceArea.GetOwner(),
-		url:   serviceArea.GetFlightsUrl(),
+		url:   serviceArea.GetUrl(),
 	}
 
 	starts, err := ptypes.Timestamp(serviceArea.GetExtents().GetTimeStart())
 	if err != nil {
 		return nil, err
 	}
-	isar.startsAt = starts
+	isar.StartTime = starts
 
 	ends, err := ptypes.Timestamp(serviceArea.GetExtents().GetTimeEnd())
 	if err != nil {
 		return nil, err
 	}
-	isar.endsAt = ends
+	isar.EndTime = ends
 
 	tx, err := s.Begin()
 	if err != nil {
@@ -151,8 +151,8 @@ func (c *crISAStore) Insert(ctx context.Context, serviceArea *dspb.Identificatio
 		isar.id,
 		isar.owner,
 		isar.url,
-		isar.startsAt,
-		isar.endsAt,
+		isar.StartTime,
+		isar.EndTime,
 	)); err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
@@ -169,7 +169,7 @@ func (c *crISAStore) Insert(ctx context.Context, serviceArea *dspb.Identificatio
 		FlightsUrl: isar.url,
 	}
 
-	ts, err := ptypes.TimestampProto(isar.startsAt)
+	ts, err := ptypes.TimestampProto(isar.StartTime)
 	if err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
@@ -178,7 +178,7 @@ func (c *crISAStore) Insert(ctx context.Context, serviceArea *dspb.Identificatio
 		TimeStart:     ts,
 	}
 
-	ts, err = ptypes.TimestampProto(isar.endsAt)
+	ts, err = ptypes.TimestampProto(isar.EndTime)
 	if err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}

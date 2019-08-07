@@ -94,12 +94,12 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 		owner STRING NOT NULL,
 		url STRING NOT NULL,
 		notification_index INT4 DEFAULT 0,
-		begins_at TIMESTAMPTZ,
-		expires_at TIMESTAMPTZ,
+		starts_at TIMESTAMPTZ NOT NULL,
+		ends_at TIMESTAMPTZ NOT NULL,
 		updated_at TIMESTAMPTZ NOT NULL,
-		INDEX begins_at_idx (begins_at),
-		INDEX expires_at_idx (expires_at),
-		CHECK (begins_at IS NULL OR expires_at IS NULL OR begins_at < expires_at)
+		INDEX starts_at_idx (starts_at),
+		INDEX ends_at_idx (ends_at),
+		CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at)
 	);
 	CREATE TABLE IF NOT EXISTS cells_subscriptions (
 		cell_id INT64 NOT NULL,

@@ -41,8 +41,8 @@ type Subscription struct {
 	Owner             string
 	Cells             s2.CellUnion
 	// TODO(steeling): abstract nullTime away from models.
-	BeginsAt   nullTime
-	ExpiresAt  nullTime
+	StartTime  nullTime
+	EndTime    nullTime
 	UpdatedAt  time.Time
 	AltitudeHi float32
 	AltitudeLo float32
@@ -57,11 +57,11 @@ func (s *Subscription) Apply(s2 *Subscription) *Subscription {
 	if s2.Cells != nil {
 		new.Cells = s2.Cells
 	}
-	if s2.BeginsAt.Valid {
-		new.BeginsAt = s2.BeginsAt
+	if s2.StartTime.Valid {
+		new.StartTime = s2.StartTime
 	}
-	if s2.ExpiresAt.Valid {
-		new.ExpiresAt = s2.ExpiresAt
+	if s2.EndTime.Valid {
+		new.EndTime = s2.EndTime
 	}
 	if !s2.UpdatedAt.IsZero() {
 		new.UpdatedAt = s2.UpdatedAt
@@ -94,29 +94,27 @@ func (s *Subscription) Version() string {
 
 func (s *Subscription) ToProto() (*dspb.Subscription, error) {
 	result := &dspb.Subscription{
-		Id:    s.ID,
-		Owner: s.Owner,
-		Callbacks: &dspb.SubscriptionCallbacks{
-			IdentificationServiceAreaUrl: s.Url,
-		},
+		Id:                s.ID,
+		Owner:             s.Owner,
+		Url:               s.Url,
 		NotificationIndex: int32(s.NotificationIndex),
 		Version:           s.Version(),
 	}
 
-	if s.BeginsAt.Valid {
-		ts, err := ptypes.TimestampProto(s.BeginsAt.Time)
+	if s.StartTime.Valid {
+		ts, err := ptypes.TimestampProto(s.StartTime.Time)
 		if err != nil {
 			return nil, err
 		}
-		result.Begins = ts
+		result.StartTime = ts
 	}
 
-	if s.ExpiresAt.Valid {
-		ts, err := ptypes.TimestampProto(s.ExpiresAt.Time)
+	if s.EndTime.Valid {
+		ts, err := ptypes.TimestampProto(s.EndTime.Time)
 		if err != nil {
 			return nil, err
 		}
-		result.Expires = ts
+		result.EndTime = ts
 	}
 	return result, nil
 }

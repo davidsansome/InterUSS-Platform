@@ -38,8 +38,8 @@ func (c *crSubscriptionStore) fetch(ctx context.Context, q queryable, query stri
 			&s.Owner,
 			&s.Url,
 			&s.NotificationIndex,
-			&s.BeginsAt,
-			&s.ExpiresAt,
+			&s.StartTime,
+			&s.EndTime,
 		)
 		if err != nil {
 			return nil, err
@@ -66,8 +66,8 @@ func (c *crSubscriptionStore) fetchByID(ctx context.Context, q queryable, id str
 		&s.Owner,
 		&s.Url,
 		&s.NotificationIndex,
-		&s.BeginsAt,
-		&s.ExpiresAt,
+		&s.StartTime,
+		&s.EndTime,
 	)
 	if err != nil {
 		return nil, err
@@ -96,8 +96,8 @@ func (c *crSubscriptionStore) push(ctx context.Context, q queryable, s *models.S
 		s.Owner,
 		s.Url,
 		s.NotificationIndex,
-		s.BeginsAt,
-		s.ExpiresAt,
+		s.StartTime,
+		s.EndTime,
 	); err != nil {
 		return err
 	}
