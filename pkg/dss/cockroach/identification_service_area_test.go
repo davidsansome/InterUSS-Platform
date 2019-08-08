@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/golang/geo/s2"
-	"github.com/golang/protobuf/ptypes"
 	uuid "github.com/satori/go.uuid"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	"github.com/stretchr/testify/require"
@@ -35,13 +34,15 @@ var (
 
 func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 	var (
-		ctx                  = context.Background()
-		insertedServiceAreas = []*dspb.IdentificationServiceArea{}
-		cells                = s2.CellUnion{
+		ctx   = context.Background()
+		cells = s2.CellUnion{
 			s2.CellID(42),
 			s2.CellID(84),
 			s2.CellID(126),
 			s2.CellID(168),
+		}
+		insertedServiceAreas = []*models.IdentificationServiceArea{
+			{Cells: cells},
 		}
 		store, tearDownStore = setUpStore(ctx, t)
 	)
@@ -50,7 +51,7 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 	}()
 
 	for _, r := range serviceAreasPool {
-		saOut, err := store.insertIdentificationServiceAreaUnchecked(ctx, r.input, cells)
+		saOut, _, err := store.InsertISA(ctx, r.input)
 		require.NoError(t, err)
 		require.NotNil(t, saOut)
 
@@ -126,18 +127,14 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 	} {
 		t.Run(r.name, func(t *testing.T) {
 			for _, sa := range insertedServiceAreas {
-				start, err := ptypes.Timestamp(sa.GetExtents().GetTimeStart())
-				require.NoError(t, err)
-				end, err := ptypes.Timestamp(sa.GetExtents().GetTimeEnd())
-				require.NoError(t, err)
 
-				earliest, latest := r.timestampMutator(start, end)
+				earliest, latest := r.timestampMutator(sa.StartTime.Time, sa.EndTime.Time)
 
-				serviceAreas, err := store.SearchIdentificationServiceAreas(ctx, r.cells, earliest, latest)
+				serviceAreas, err := store.SearchISAs(ctx, r.cells, earliest, latest)
 				require.NoError(t, err)
 				require.Len(t, serviceAreas, r.expectedLen)
 				for i := 0; i < r.expectedLen; i++ {
-					require.Equal(t, sa.GetId(), serviceAreas[i].GetId())
+					require.Equal(t, sa.ID, serviceAreas[i].ID)
 				}
 			}
 		})
@@ -181,13 +178,4 @@ func TestStoreDeleteIdentificationServiceAreas(t *testing.T) {
 		require.NotNil(t, serviceAreaOut)
 		require.NotNil(t, subscriptionsOut)
 	}
-}
-
-func (c *Store) UpdateISA(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error) {
-	return nil, nil, nil
-}
-
-// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-func (c *Store) SearchISAs(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.IdentificationServiceArea, error) {
-	return nil, nil
 }

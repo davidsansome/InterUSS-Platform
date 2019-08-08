@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/geo/s2"
-	"github.com/golang/protobuf/ptypes"
 	uuid "github.com/satori/go.uuid"
 	"github.com/steeling/InterUSS-Platform/pkg/dss"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
@@ -79,21 +77,13 @@ func TestDatabaseEnsuresBeginsBeforeExpires(t *testing.T) {
 		begins  = time.Now()
 		expires = begins.Add(-5 * time.Minute)
 	)
-
-	tsb, err := ptypes.TimestampProto(begins)
-	require.NoError(t, err)
-	tse, err := ptypes.TimestampProto(expires)
-	require.NoError(t, err)
-
-	_, err = store.insertSubscription(ctx, &dspb.Subscription{
-		Id:    uuid.NewV4().String(),
-		Owner: "me-myself-and-i",
-		Callbacks: &dspb.SubscriptionCallbacks{
-			IdentificationServiceAreaUrl: "https://no/place/like/home",
-		},
+	_, err := store.InsertSubscription(ctx, &models.Subscription{
+		ID:                uuid.NewV4().String(),
+		Owner:             "me-myself-and-i",
+		Url:               "https://no/place/like/home",
 		NotificationIndex: 42,
-		Begins:            tsb,
-		Expires:           tse,
-	}, s2.CellUnion{})
+		StartTime:         models.NullTime{begins, true},
+		EndTime:           models.NullTime{expires, true},
+	})
 	require.Error(t, err)
 }

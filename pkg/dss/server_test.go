@@ -54,11 +54,6 @@ func (ms *mockStore) UpdateISA(ctx context.Context, isa *models.IdentificationSe
 	return nil, nil, nil
 }
 
-// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-func (ms *mockStore) SearchISAs(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.IdentificationServiceArea, error) {
-	return nil, nil
-}
-
 func (ms *mockStore) InsertSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
 	return nil, nil
 }
@@ -67,9 +62,9 @@ func (ms *mockStore) UpdateSubscription(ctx context.Context, s *models.Subscript
 	return nil, nil
 }
 
-func (ms *mockStore) SearchIdentificationServiceAreas(ctx context.Context, cells s2.CellUnion, earliest *time.Time, latest *time.Time) ([]*dspb.IdentificationServiceArea, error) {
+func (ms *mockStore) SearchISAs(ctx context.Context, cells s2.CellUnion, earliest *time.Time, latest *time.Time) ([]*models.IdentificationServiceArea, error) {
 	args := ms.Called(ctx, cells, earliest, latest)
-	return args.Get(0).([]*dspb.IdentificationServiceArea), args.Error(1)
+	return args.Get(0).([]*models.IdentificationServiceArea), args.Error(1)
 }
 
 func TestDeleteSubscriptionCallsIntoMockStore(t *testing.T) {
@@ -268,16 +263,12 @@ func TestSearchIdentificationServiceAreasCallsIntoStore(t *testing.T) {
 		}
 	)
 
-	ms.On("SearchIdentificationServiceAreas", ctx, mock.Anything, (*time.Time)(nil), (*time.Time)(nil)).Return(
-		[]*dspb.IdentificationServiceArea{
+	ms.On("SearchISAs", ctx, mock.Anything, (*time.Time)(nil), (*time.Time)(nil)).Return(
+		[]*models.IdentificationServiceArea{
 			{
-				Id:         uuid.NewV4().String(),
-				Owner:      "me-myself-and-i",
-				FlightsUrl: "https://no/place/like/home",
-				Extents: &dspb.Volume4D{
-					TimeStart: ptypes.TimestampNow(),
-					TimeEnd:   ptypes.TimestampNow(),
-				},
+				ID:    uuid.NewV4().String(),
+				Owner: "me-myself-and-i",
+				Url:   "https://no/place/like/home",
 			},
 		}, error(nil),
 	)

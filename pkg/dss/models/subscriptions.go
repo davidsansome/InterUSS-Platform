@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"time"
 
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
@@ -9,24 +8,6 @@ import (
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
 )
-
-type SubscriptionStore interface {
-	// Close closes the store and should release all resources.
-	Close() error
-	// GetSubscription returns the subscription identified by "id".
-	Get(ctx context.Context, id string) (*Subscription, error)
-
-	// Delete deletes the subscription identified by "id" and
-	// returns the deleted subscription.
-	Delete(ctx context.Context, id, version string) (*Subscription, error)
-
-	Insert(ctx context.Context, s *Subscription) (*Subscription, error)
-
-	Put(ctx context.Context, s *Subscription) (*Subscription, error)
-
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*Subscription, error)
-}
 
 type Subscription struct {
 	// Embed the proto

@@ -5,13 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
 
-	"github.com/golang/geo/s2"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/auth"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
-	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 )
 
@@ -20,82 +17,9 @@ var (
 	ReadISAScope  = "dss.read.identification_service_areas"
 )
 
-type SubscriptionStore interface {
-	// Close closes the store and should release all resources.
-	Close() error
-	// GetSubscription returns the subscription identified by "id".
-	Get(ctx context.Context, id string) (*models.Subscription, error)
-
-	// Delete deletes the subscription identified by "id" and
-	// returns the deleted subscription.
-	Delete(ctx context.Context, id, version string) (*models.Subscription, error)
-
-	Insert(ctx context.Context, s *models.Subscription) (*models.Subscription, error)
-
-	Put(ctx context.Context, s *models.Subscription) (*models.Subscription, error)
-
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	Search(ctx context.Context, cells s2.CellUnion, owner string) (*models.Subscription, error)
-}
-
-type IdentificationServiceAreaStore interface {
-	// Close closes the store and should release all resources.
-	Close() error
-	// Get returns the IdentificationServiceArea identified by "id".
-	Get(ctx context.Context, id string, owner string) (*models.IdentificationServiceArea, []*models.Subscription, error)
-
-	// Delete deletes the IdentificationServiceArea identified by "id" and owned by "owner".
-	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
-	Delete(ctx context.Context, id string, owner string) (*models.IdentificationServiceArea, []*models.Subscription, error)
-
-	Insert(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error)
-
-	Put(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error)
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	Search(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.IdentificationServiceArea, error)
-}
-
-// NewNilStore returns a nil Store instance.
-func NewNilStore() Store {
-	return nil
-}
-
 // Server implements dssproto.DiscoveryAndSynchronizationService.
 type Server struct {
 	Store Store
-}
-
-type Store interface {
-	// Close closes the store and should release all resources.
-	Close() error
-
-	// Delete deletes the IdentificationServiceArea identified by "id" and owned by "owner".
-	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.
-	DeleteISA(ctx context.Context, id, owner, version string) (*models.IdentificationServiceArea, []*models.Subscription, error)
-
-	InsertISA(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error)
-
-	UpdateISA(ctx context.Context, isa *models.IdentificationServiceArea) (*models.IdentificationServiceArea, []*models.Subscription, error)
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	SearchISAs(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.IdentificationServiceArea, error)
-
-	// GetSubscription returns the subscription identified by "id".
-	GetSubscription(ctx context.Context, id string) (*models.Subscription, error)
-
-	// Delete deletes the subscription identified by "id" and
-	// returns the deleted subscription.
-	DeleteSubscription(ctx context.Context, id, owner, version string) (*models.Subscription, error)
-
-	InsertSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error)
-
-	UpdateSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error)
-
-	// SearchSubscriptions returns all subscriptions ownded by "owner" in "cells".
-	SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner string) ([]*models.Subscription, error)
-}
-
-func NewNilStore() Store {
-	return nil
 }
 
 func (s *Server) AuthScopes() map[string][]string {
@@ -204,7 +128,7 @@ func (s *Server) SearchIdentificationServiceAreas(ctx context.Context, req *dspb
 		}
 	}
 
-	serviceAreas, err := s.Store.SearchIdentificationServiceAreas(ctx, cu, earliest, latest)
+	isas, err := s.Store.SearchISAs(ctx, cu, earliest, latest)
 	if err != nil {
 		// TODO(tvoss): Revisit once error propagation strategy is defined. We
 		// might want to avoid leaking raw error messages to callers and instead
@@ -212,8 +136,17 @@ func (s *Server) SearchIdentificationServiceAreas(ctx context.Context, req *dspb
 		return nil, err
 	}
 
+	areas := make([]*dspb.IdentificationServiceArea, len(isas))
+	for i := range isas {
+		a, err := isas[i].ToProto()
+		if err != nil {
+			return nil, err
+		}
+		areas[i] = a
+	}
+
 	return &dspb.SearchIdentificationServiceAreasResponse{
-		ServiceAreas: serviceAreas,
+		ServiceAreas: areas,
 	}, nil
 }
 
