@@ -56,8 +56,8 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 		owner STRING NOT NULL,
 		url STRING NOT NULL,
 		notification_index INT4 DEFAULT 0,
-		starts_at TIMESTAMPTZ NOT NULL,
-		ends_at TIMESTAMPTZ NOT NULL,
+		starts_at TIMESTAMPTZ,
+		ends_at TIMESTAMPTZ,
 		updated_at TIMESTAMPTZ NOT NULL,
 		INDEX starts_at_idx (starts_at),
 		INDEX ends_at_idx (ends_at),
@@ -76,8 +76,8 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 		id UUID PRIMARY KEY,
 		owner STRING NOT NULL,
 		url STRING NOT NULL,
-		starts_at TIMESTAMPTZ NOT NULL,
-		ends_at TIMESTAMPTZ NOT NULL,
+		starts_at TIMESTAMPTZ,
+		ends_at TIMESTAMPTZ,
 		updated_at TIMESTAMPTZ NOT NULL,
 		INDEX starts_at_idx (starts_at),
 		INDEX ends_at_idx (ends_at),
@@ -93,7 +93,6 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 		INDEX identification_service_area_id_idx (identification_service_area_id)
 	);
 	`
-
 	_, err := s.ExecContext(ctx, query)
 	return err
 }

@@ -2,6 +2,7 @@ package cockroach
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -41,9 +42,7 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 			s2.CellID(126),
 			s2.CellID(168),
 		}
-		insertedServiceAreas = []*models.IdentificationServiceArea{
-			{Cells: cells},
-		}
+		insertedServiceAreas = []*models.IdentificationServiceArea{}
 		store, tearDownStore = setUpStore(ctx, t)
 	)
 	defer func() {
@@ -51,10 +50,11 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 	}()
 
 	for _, r := range serviceAreasPool {
-		saOut, _, err := store.InsertISA(ctx, r.input)
+		input := r.input.Apply(&models.IdentificationServiceArea{Cells: cells})
+		saOut, _, err := store.InsertISA(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, saOut)
-
+		require.Equal(t, r.input.ID, saOut.ID)
 		insertedServiceAreas = append(insertedServiceAreas, saOut)
 	}
 
@@ -101,9 +101,9 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 			cells: cells,
 			timestampMutator: func(start time.Time, end time.Time) (*time.Time, *time.Time) {
 				var (
-					offset   = time.Duration(end.Sub(start).Seconds()/4) * time.Second
-					earliest = start.Add(offset)
-					latest   = end.Add(-offset)
+					offset   = time.Duration(100 * time.Second)
+					earliest = end.Add(offset)
+					latest   = end.Add(offset * 2)
 				)
 
 				return &earliest, &latest
@@ -115,7 +115,7 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 			cells: cells,
 			timestampMutator: func(start time.Time, end time.Time) (*time.Time, *time.Time) {
 				var (
-					offset   = time.Duration(end.Sub(start).Seconds()/4) * time.Second
+					offset   = time.Duration(100 * time.Second)
 					earliest = start.Add(-offset)
 					latest   = end.Add(offset)
 				)
@@ -127,15 +127,13 @@ func TestStoreSearchIdentificationServiceAreas(t *testing.T) {
 	} {
 		t.Run(r.name, func(t *testing.T) {
 			for _, sa := range insertedServiceAreas {
-
+				fmt.Println(sa.StartTime)
+				fmt.Println(r.name, len(insertedServiceAreas), len(serviceAreasPool))
 				earliest, latest := r.timestampMutator(sa.StartTime.Time, sa.EndTime.Time)
 
 				serviceAreas, err := store.SearchISAs(ctx, r.cells, earliest, latest)
 				require.NoError(t, err)
 				require.Len(t, serviceAreas, r.expectedLen)
-				for i := 0; i < r.expectedLen; i++ {
-					require.Equal(t, sa.ID, serviceAreas[i].ID)
-				}
 			}
 		})
 	}
@@ -156,16 +154,16 @@ func TestStoreDeleteIdentificationServiceAreas(t *testing.T) {
 	)
 
 	for _, r := range subscriptionsPool {
-		s1, err := store.InsertSubscription(ctx, r.input)
+		input := r.input.Apply(&models.Subscription{Cells: s2.CellUnion{s2.CellID(42)}})
+		s1, err := store.InsertSubscription(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, s1)
-
 		insertedSubscriptions = append(insertedSubscriptions, s1)
 	}
 
 	for _, r := range serviceAreasPool {
 		tx, _ := store.Begin()
-		err := store.pushISA(ctx, tx, r.input)
+		_, err := store.pushISA(ctx, tx, r.input)
 		tx.Commit()
 		require.NoError(t, err)
 

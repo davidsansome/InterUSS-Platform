@@ -30,6 +30,7 @@ func (c *Store) fetchSubscriptions(ctx context.Context, q queryable, query strin
 			&s.NotificationIndex,
 			&s.StartTime,
 			&s.EndTime,
+			&s.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -42,27 +43,26 @@ func (c *Store) fetchSubscriptions(ctx context.Context, q queryable, query strin
 	return payload, nil
 }
 
-func (c *Store) fetchSubscriptionByID(ctx context.Context, q queryable, id string) (*models.Subscription, error) {
+func (c *Store) fetchSubscription(ctx context.Context, q queryable, query string, args ...interface{}) (*models.Subscription, error) {
 	// TODO(steeling) don't fetch by *
-	const query = `
-		SELECT * FROM
-			subscriptions
-		WHERE
-			id = $1`
-	s := new(models.Subscription)
-
-	err := q.QueryRowContext(ctx, query, id).Scan(
-		&s.ID,
-		&s.Owner,
-		&s.Url,
-		&s.NotificationIndex,
-		&s.StartTime,
-		&s.EndTime,
-	)
+	subs, err := c.fetchSubscriptions(ctx, q, query, args...)
 	if err != nil {
 		return nil, err
 	}
-	return s, nil
+	if len(subs) > 1 {
+		return nil, multierr.Combine(err, fmt.Errorf("query returned %d subscriptions", len(subs)))
+	}
+	// TODO(steeling) shouldn't this already be returned?
+	if len(subs) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return subs[0], nil
+}
+
+func (c *Store) fetchSubscriptionByID(ctx context.Context, q queryable, id string) (*models.Subscription, error) {
+	// TODO(steeling) don't fetch by *
+	const query = `SELECT * FROM subscriptions WHERE id = $1`
+	return c.fetchSubscription(ctx, q, query, id)
 }
 
 func (c *Store) fetchSubscriptionByIDAndOwner(ctx context.Context, q queryable, id, owner string) (*models.Subscription, error) {
@@ -73,29 +73,18 @@ func (c *Store) fetchSubscriptionByIDAndOwner(ctx context.Context, q queryable, 
 		WHERE
 			id = $1
 			AND owner = $2`
-	s := new(models.Subscription)
-
-	err := q.QueryRowContext(ctx, query, id, owner).Scan(
-		&s.ID,
-		&s.Owner,
-		&s.Url,
-		&s.NotificationIndex,
-		&s.StartTime,
-		&s.EndTime,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
+	return c.fetchSubscription(ctx, q, query, id, owner)
 }
 
-func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Subscription) error {
+func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Subscription) (*models.Subscription, error) {
 	const (
 		upsertQuery = `
 		UPSERT INTO
 		  subscriptions
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())`
+			($1, $2, $3, $4, $5, $6, transaction_timestamp())
+		RETURNING
+			*`
 		subscriptionCellQuery = `
 		UPSERT INTO
 			cells_subscriptions
@@ -103,26 +92,27 @@ func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Sub
 			($1, $2, $3, transaction_timestamp())
 		`
 	)
-	if _, err := q.ExecContext(
-		ctx,
-		upsertQuery,
+	cells := s.Cells
+	s, err := c.fetchSubscription(ctx, q, upsertQuery,
 		s.ID,
 		s.Owner,
 		s.Url,
 		s.NotificationIndex,
 		s.StartTime,
-		s.EndTime,
-	); err != nil {
-		return err
+		s.EndTime)
+	if err != nil {
+		return nil, err
 	}
+	s.Cells = cells
 
 	// TODO(steeling) we also need to delete any leftover cells.
 	for _, cell := range s.Cells {
 		if _, err := q.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), s.ID); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	s.Cells = cells
+	return s, err
 }
 
 // Get returns the subscription identified by "id".
@@ -139,15 +129,17 @@ func (c *Store) InsertSubscription(ctx context.Context, s *models.Subscription) 
 		return nil, err
 	}
 	_, err = c.fetchSubscriptionByID(ctx, tx, s.ID)
-	if err != sql.ErrNoRows {
-		// TODO(steeling) fix errors
-		return nil, errors.New("already exists")
-	}
-	if err != nil {
+	switch {
+	case err == sql.ErrNoRows:
+		break
+	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
+	case err == nil:
+		return nil, multierr.Combine(errors.New("already exists"), tx.Rollback())
 	}
 
-	if err := c.pushSubscription(ctx, tx, s); err != nil {
+	s, err = c.pushSubscription(ctx, tx, s)
+	if err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -158,6 +150,7 @@ func (c *Store) InsertSubscription(ctx context.Context, s *models.Subscription) 
 
 // updatesSubscription updates the subscription  and returns
 // the resulting subscription including its ID.
+// TODO(steeling) don't allow owners to update other owners' subscriptions
 func (c *Store) UpdateSubscription(ctx context.Context, s *models.Subscription) (*models.Subscription, error) {
 	tx, err := c.Begin()
 	if err != nil {
@@ -175,7 +168,8 @@ func (c *Store) UpdateSubscription(ctx context.Context, s *models.Subscription) 
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
 
-	if err := c.pushSubscription(ctx, tx, old.Apply(s)); err != nil {
+	s, err = c.pushSubscription(ctx, tx, old.Apply(s))
+	if err != nil {
 		return nil, err
 	}
 

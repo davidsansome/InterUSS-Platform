@@ -20,8 +20,9 @@ var (
 	_ dss.Store = &Store{}
 
 	storeURI  = flag.String("store-uri", "", "URI pointing to a Cockroach node")
-	startTime = models.NullTime{Time: time.Now().AddDate(0, 0, -1), Valid: true}
-	endTime   = models.NullTime{Time: time.Now().AddDate(0, 0, 1), Valid: true}
+	tempTime  = time.Now()
+	startTime = models.NullTime{Time: tempTime.AddDate(0, 0, -1), Valid: true}
+	endTime   = models.NullTime{Time: tempTime.AddDate(0, 0, 1), Valid: true}
 )
 
 func init() {

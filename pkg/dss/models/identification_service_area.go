@@ -28,6 +28,34 @@ func (i *IdentificationServiceArea) Version() string {
 	return timestampToVersionString(i.UpdatedAt)
 }
 
+// Apply fields from s2 onto s, preferring any fields set in i2.
+func (s *IdentificationServiceArea) Apply(i2 *IdentificationServiceArea) *IdentificationServiceArea {
+	new := *s
+	if i2.Url != "" {
+		new.Url = i2.Url
+	}
+	if i2.Cells != nil {
+		new.Cells = i2.Cells
+	}
+	if i2.StartTime.Valid {
+		new.StartTime = i2.StartTime
+	}
+	if i2.EndTime.Valid {
+		new.EndTime = i2.EndTime
+	}
+	if !i2.UpdatedAt.IsZero() {
+		new.UpdatedAt = i2.UpdatedAt
+	}
+	if i2.AltitudeHi != 0 {
+		new.AltitudeHi = i2.AltitudeHi
+	}
+	// TODO(steeling) what if the update is to make it 0, we need an omitempty, pointer, or some other type.
+	if i2.AltitudeLo != 0 {
+		new.AltitudeLo = i2.AltitudeLo
+	}
+	return &new
+}
+
 func (i *IdentificationServiceArea) ToProto() (*dspb.IdentificationServiceArea, error) {
 	result := &dspb.IdentificationServiceArea{
 		Id:      i.ID,

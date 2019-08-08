@@ -66,6 +66,16 @@ var (
 				UpdatedAt:         startTime.Time,
 			},
 		},
+		{
+			name: "a subscription with a different owner",
+			input: &models.Subscription{
+				ID:                uuid.NewV4().String(),
+				Owner:             "you",
+				Url:               "https://no/place/like/home",
+				NotificationIndex: 42,
+				UpdatedAt:         startTime.Time,
+			},
+		},
 	}
 )
 
@@ -167,15 +177,15 @@ func TestStoreUpdateSubscription(t *testing.T) {
 
 			// Test changes without the version differing.
 			r2 := sub1
-			r2.Owner = "new test owner"
+			r2.Url = "new URL"
 			sub2, err := store.UpdateSubscription(ctx, r2)
 			require.NoError(t, err)
 			require.NotNil(t, sub2)
-			require.Equal(t, sub2.Owner, "new test owner")
+			require.Equal(t, "new URL", sub2.Url)
 
 			// Applying an empty subscription will return a copy
 			r3 := r.input.Apply(&models.Subscription{})
-			r3.Owner = "new test owner 2"
+			r3.Url = "new URL 2"
 			r3.UpdatedAt = time.Now()
 			sub3, err := store.UpdateSubscription(ctx, r3)
 			require.Error(t, err)
@@ -235,6 +245,7 @@ func TestStoreSearchSubscription(t *testing.T) {
 			s2.CellID(84),
 			s2.CellID(126),
 			s2.CellID(168),
+			s2.CellID(200),
 		}
 		owners = []string{
 			"me",
@@ -242,6 +253,7 @@ func TestStoreSearchSubscription(t *testing.T) {
 			"self",
 			"and",
 			"i",
+			"you",
 		}
 	)
 

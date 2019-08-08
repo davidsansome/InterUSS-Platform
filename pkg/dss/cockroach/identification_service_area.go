@@ -30,6 +30,7 @@ func (c *Store) fetchISAs(ctx context.Context, q queryable, query string, args .
 			&i.Url,
 			&i.StartTime,
 			&i.EndTime,
+			&i.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -42,6 +43,21 @@ func (c *Store) fetchISAs(ctx context.Context, q queryable, query string, args .
 	return payload, nil
 }
 
+func (c *Store) fetchISA(ctx context.Context, q queryable, query string, args ...interface{}) (*models.IdentificationServiceArea, error) {
+	// TODO(steeling) don't fetch by *
+	isas, err := c.fetchISAs(ctx, q, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(isas) > 1 {
+		return nil, multierr.Combine(err, fmt.Errorf("query returned %d identification_service_areas", len(isas)))
+	}
+	if len(isas) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return isas[0], nil
+}
+
 func (c *Store) fetchISAByID(ctx context.Context, q queryable, id string) (*models.IdentificationServiceArea, error) {
 	// TODO(steeling) don't fetch by *
 	const query = `
@@ -49,19 +65,7 @@ func (c *Store) fetchISAByID(ctx context.Context, q queryable, id string) (*mode
 			identification_service_areas
 		WHERE
 			id = $1`
-	i := new(models.IdentificationServiceArea)
-
-	err := q.QueryRowContext(ctx, query, id).Scan(
-		&i.ID,
-		&i.Owner,
-		&i.Url,
-		&i.StartTime,
-		&i.EndTime,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return i, nil
+	return c.fetchISA(ctx, q, query, id)
 }
 
 func (c *Store) fetchISAByIDAndOwner(ctx context.Context, q queryable, id, owner string) (*models.IdentificationServiceArea, error) {
@@ -72,54 +76,45 @@ func (c *Store) fetchISAByIDAndOwner(ctx context.Context, q queryable, id, owner
 		WHERE
 			id = $1
 			AND owner = $2`
-	i := new(models.IdentificationServiceArea)
-
-	err := q.QueryRowContext(ctx, query, id, owner).Scan(
-		&i.ID,
-		&i.Owner,
-		&i.Url,
-		&i.StartTime,
-		&i.EndTime,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return i, nil
+	return c.fetchISA(ctx, q, query, id, owner)
 }
 
-func (c *Store) pushISA(ctx context.Context, tx *sql.Tx, i *models.IdentificationServiceArea) error {
+func (c *Store) pushISA(ctx context.Context, tx *sql.Tx, i *models.IdentificationServiceArea) (*models.IdentificationServiceArea, error) {
 	const (
 		upsertQuery = `
 		UPSERT INTO
-		  subscriptions
+		  identification_service_areas
 		VALUES
-			($1, $2, $3, $4, $5, $6, $7, $8, transaction_timestamp())`
-		subscriptionCellQuery = `
+			($1, $2, $3, $4, $5, transaction_timestamp())
+		RETURNING
+			*`
+		isaCellQuery = `
 		UPSERT INTO
-			cells_subscriptions
+			cells_identification_service_areas
 		VALUES
 			($1, $2, $3, transaction_timestamp())
 		`
 	)
-	if _, err := tx.ExecContext(
-		ctx,
-		upsertQuery,
+	cells := i.Cells
+	isa, err := c.fetchISA(ctx, tx, upsertQuery,
 		i.ID,
 		i.Owner,
 		i.Url,
 		i.StartTime,
 		i.EndTime,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return nil, err
 	}
+	isa.Cells = cells
 
 	// TODO(steeling) we also need to delete any leftover cells.
-	for _, cell := range i.Cells {
-		if _, err := tx.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), i.ID); err != nil {
-			return err
+	for _, cell := range isa.Cells {
+		if _, err := tx.ExecContext(ctx, isaCellQuery, cell, cell.Level(), i.ID); err != nil {
+			return nil, err
 		}
 	}
-	return nil
+	return isa, nil
 }
 
 func (c *Store) populateISACells(ctx context.Context, q queryable, i *models.IdentificationServiceArea) error {
@@ -128,8 +123,8 @@ func (c *Store) populateISACells(ctx context.Context, q queryable, i *models.Ide
 		cell_id
 	FROM
 		cells_identification_service_areas
-	WHERE identification_service_area_id = $1
-		subscriptions.owner != $2`
+	WHERE identification_service_area_id = $1`
+
 	rows, err := q.QueryContext(ctx, query, i.ID)
 	if err != nil {
 		return err
@@ -177,12 +172,17 @@ func (c *Store) InsertISA(ctx context.Context, isa *models.IdentificationService
 		return nil, nil, err
 	}
 
-	if err := c.pushISA(ctx, tx, isa); err != nil {
+	isa, err = c.pushISA(ctx, tx, isa)
+	if err != nil {
 		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
 
 	// TODO(steeling) implement removing old cells
-	subscriptions, err := c.fetchSubscriptions(ctx, tx, subscriptionsQuery, pq.Array(isa.Cells), isa.Owner)
+	cids := make([]int64, len(isa.Cells))
+	for i, cid := range isa.Cells {
+		cids[i] = int64(cid)
+	}
+	subscriptions, err := c.fetchSubscriptions(ctx, tx, subscriptionsQuery, pq.Int64Array(cids), isa.Owner)
 	if err != nil {
 		return nil, nil, multierr.Combine(err, tx.Rollback())
 	}
@@ -291,12 +291,17 @@ func (c *Store) SearchISAs(ctx context.Context, cells s2.CellUnion, earliest *ti
 		return nil, errors.New("missing cell IDs for query")
 	}
 
+	cids := make([]int64, len(cells))
+	for i, cid := range cells {
+		cids[i] = int64(cid)
+	}
+
 	tx, err := c.Begin()
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := c.fetchISAs(ctx, tx, serviceAreasInCellsQuery, pq.Array(cells), earliest, latest)
+	result, err := c.fetchISAs(ctx, tx, serviceAreasInCellsQuery, pq.Int64Array(cids), earliest, latest)
 	if err != nil {
 		return nil, multierr.Combine(err, tx.Rollback())
 	}

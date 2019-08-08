@@ -28,7 +28,7 @@ type Subscription struct {
 // Apply fields from s2 onto s, preferring any fields set in s2.
 func (s *Subscription) Apply(s2 *Subscription) *Subscription {
 	new := *s
-	if s2.Url == "" {
+	if s2.Url != "" {
 		new.Url = s2.Url
 	}
 	if s2.Cells != nil {
