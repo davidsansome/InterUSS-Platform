@@ -23,7 +23,7 @@ apiVersion: v1
 metadata:
   name: grpc-backend-config 
 data:
-  cockroach.uri: postgresql://root@localhost:26257?sslmode=disable 
+  cockroach.uri: postgresql://root@localhost:26257?sslmode=disable
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
