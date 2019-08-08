@@ -202,7 +202,7 @@ func (c *Store) DeleteSubscription(ctx context.Context, id, owner, version strin
 		return nil, multierr.Combine(err, tx.Rollback())
 	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
-	case version != "" && version != old.Version():
+	case version != old.Version():
 		err := fmt.Errorf("version mismatch for subscription %s", id)
 		return nil, multierr.Combine(err, tx.Rollback())
 	}
