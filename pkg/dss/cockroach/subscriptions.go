@@ -163,7 +163,7 @@ func (c *Store) UpdateSubscription(ctx context.Context, s *models.Subscription) 
 		return nil, multierr.Combine(dsserr.NotFound("not found"), tx.Rollback())
 	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
-	case s.Version() != "" && s.Version() != old.Version():
+	case s.Version() != old.Version():
 		return nil, multierr.Combine(dsserr.VersionMismatch("old version"), tx.Rollback())
 	}
 
