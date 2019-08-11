@@ -1,0 +1,339 @@
+---
+# Source: cockroachdb/templates/cockroachdb-statefulset-secure.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cockroachdb
+  namespace: wing-remoteid-1-us-central1
+  labels:
+    app: cockroachdb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # This service only exists to create DNS entries for each pod in the stateful
+  # set such that they can resolve each other's IP addresses. It does not
+  # create a load-balanced ClusterIP and should not be used directly by clients
+  # in most circumstances.
+  name: cockroachdb
+  namespace: wing-remoteid-1-us-central1
+  labels:
+    app: cockroachdb
+  annotations:
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    # Enable automatic monitoring of all instances when Prometheus is running in the cluster.
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "_status/vars"
+    prometheus.io/port: "8080"
+spec:
+  ports:
+  - port: 26257
+    targetPort: 26257
+    name: grpc
+  - port: 8080
+    targetPort: 8080
+    name: http
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other CockroachDB pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  clusterIP: None
+  selector:
+    app: cockroachdb
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: cockroachdb-budget
+  namespace: wing-remoteid-1-us-central1
+  labels:
+    app: cockroachdb
+spec:
+  selector:
+    matchLabels:
+      app: cockroachdb
+  maxUnavailable: 1
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: cockroachdb
+  namespace: wing-remoteid-1-us-central1
+spec:
+  serviceName: "cockroachdb"
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: cockroachdb
+    spec:
+      serviceAccountName: cockroachdb
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cockroachdb
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: cockroachdb
+        image: cockroachdb/cockroach:v19.1.3
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 26257
+          name: grpc
+        - containerPort: 8080
+          name: http
+        livenessProbe:
+          httpGet:
+            path: "/health"
+            port: http
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: "/health?ready=1"
+            port: http
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - name: datadir
+          mountPath: /cockroach/cockroach-data
+        - name: certs
+          mountPath: /cockroach/cockroach-certs
+        env:
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-multiregion
+        command:
+          - "/bin/bash"
+          - "-ecx"
+          # The use of qualified `hostname -f` is crucial:
+          # Other nodes aren't able to look up the unqualified hostname.
+          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --advertise-addr $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb.wing-remoteid-1-us-central1.svc.cluster.local:26257,cockroachdb-1.cockroachdb.wing-remoteid-1-us-central1.svc.cluster.local:26257,cockroachdb-2.cockroachdb.wing-remoteid-1-us-central1.svc.cluster.local:26257 --locality=zone=wing-remoteid-1-us-central1 --cache 25% --max-sql-memory 25%"
+      # No pre-stop hook is required, a SIGTERM plus some time is all that's
+      # needed for graceful shutdown of a node.
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir
+      - name: certs
+        secret:
+          secretName: cockroachdb.node
+          defaultMode: 256
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      storageClassName: 
+      accessModes:
+        - "ReadWriteOnce"
+      resources:
+        requests:
+          storage: 100Gi
+
+
+---
+# Source: cockroachdb/templates/dns-lb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    # TODO: Check whether AWS/Azure can use internal load balancers. Google
+    # can't, unfortunately.
+    # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    # cloud.google.com/load-balancer-type: "Internal"
+  labels:
+    k8s-app: kube-dns
+  name: kube-dns-lb
+  namespace: kube-system
+spec:
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+    targetPort: 53
+  selector:
+    k8s-app: kube-dns
+  sessionAffinity: None
+  type: LoadBalancer
+
+---
+# Source: cockroachdb/templates/external-name-svc.yaml
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: cockroachdb-public
+spec:
+  type: ExternalName
+  externalName: cockroachdb-public.wing-remoteid-1-us-central1.svc.cluster.local
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cockroachdb
+  labels:
+    app: cockroachdb
+
+---
+# Source: cockroachdb/templates/grpc-backend.skip
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-backend
+  labels:
+    app: grpc-backend
+  annotations:
+    # Enable automatic monitoring of all instances when Prometheus is running in the cluster.
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "_status/vars"
+    prometheus.io/port: "8080"
+spec:
+  ports:
+  - port: 8081
+    targetPort: 8081
+    name: grpc
+  selector:
+    app: grpc-backend
+  type: LoadBalancer
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: grpc-backend
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: grpc-backend
+    spec:
+      volumes:
+      - name: client-certs
+        secret:
+          secretName: cockroachdb.client.root
+          defaultMode: 256
+      - name: public-certs
+        secret:
+          secretName: dss.public.certs
+          defaultMode: 256
+      containers:
+      - name: grpc-backend
+        image: grpc-backend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: grpc
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+        - name: public-certs
+          mountPath: /public-certs
+        command:
+          - "/bin/bash"
+          - "-ecx"
+          - "exec ./main.go -addr=:8081 -public_key_file=/public-certs/oauth.pem"
+
+---
+# Source: cockroachdb/templates/loadbalancer.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  # This service is meant to be used by clients of the database. It exposes a ClusterIP that will
+  # automatically load balance connections to the different database pods.
+  name: cockroachdb-public
+  labels:
+    app: cockroachdb
+spec:
+  ports:
+  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+  # traffic and the cli.
+  - port: 26257
+    targetPort: 26257
+    name: grpc
+  # The secondary port serves the UI as well as health and debug endpoints.
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app: cockroachdb
+  sessionAffinity: ClientIP
+  type: LoadBalancer
+
+---
+# Source: cockroachdb/templates/http-gateway.skip
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: http-gateway
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: http-gateway
+    spec:
+      containers:
+      - name: http-gateway
+        image: http-gateway:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        command:
+          - "/bin/bash"
+          - "-ecx"
+          - "exec ./main.go  -grpc-backend=grpc-backend.wing-remoteid-1-us-central1:TARGET_PORT -port=8080"
+
+---
+# Source: cockroachdb/templates/cluster-init-secure.yaml
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cluster-init-secure
+  namespace: wing-remoteid-1-us-central1
+  labels:
+    app: cockroachdb
+spec:
+  template:
+    spec:
+      serviceAccountName: cockroachdb
+      containers:
+      - name: cluster-init
+        image: cockroachdb/cockroach:v19.1.3
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+        command:
+          - "/cockroach/cockroach"
+          - "init"
+          - "--certs-dir=/cockroach-certs"
+          - "--host=cockroachdb-0.cockroachdb"
+      restartPolicy: OnFailure
+      volumes:
+      - name: client-certs
+        secret:
+          secretName: cockroachdb.client.root
+          defaultMode: 256
+---
+# Source: cockroachdb/templates/rolebinding.yaml
+

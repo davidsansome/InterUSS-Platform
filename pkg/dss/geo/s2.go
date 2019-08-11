@@ -60,15 +60,24 @@ func splitAtComma(data []byte, atEOF bool) (int, []byte, error) {
 }
 
 func Volume4DToCellIDs(v4 *dspb.Volume4D) s2.CellUnion {
+	if v4 == nil {
+		return nil
+	}
 	return Volume3DToCellIDs(v4.SpatialVolume)
 }
 
 func Volume3DToCellIDs(v3 *dspb.Volume3D) s2.CellUnion {
+	if v3 == nil {
+		return nil
+	}
 	return GeoPolygonToCellIDs(v3.Footprint)
 }
 
 func GeoPolygonToCellIDs(geopolygon *dspb.GeoPolygon) s2.CellUnion {
 	var points []s2.Point
+	if geopolygon == nil {
+		return nil
+	}
 	for _, ltlng := range geopolygon.Vertices {
 		points = append(points, s2.PointFromLatLng(s2.LatLngFromDegrees(ltlng.Lat, ltlng.Lng)))
 	}

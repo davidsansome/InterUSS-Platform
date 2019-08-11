@@ -7,6 +7,7 @@ require (
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/geo v0.0.0-20190507233405-a0e886e97a51
 	github.com/golang/protobuf v1.3.2
+	github.com/google/uuid v1.1.1
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/grpc-gateway v1.9.5
 	github.com/lib/pq v1.2.0

@@ -2,7 +2,7 @@
 // source: dss.proto
 
 /*
-Package dss is a reverse proxy.
+Package dssproto is a reverse proxy.
 
 It translates gRPC into RESTful JSON APIs.
 */
@@ -10,6 +10,7 @@ package dssproto
 
 import (
 	"context"
+	fmt "fmt"
 	"io"
 	"net/http"
 
@@ -31,6 +32,14 @@ var _ = utilities.NewDoubleArray
 func request_DiscoveryAndSynchronizationService_DeleteIdentificationServiceArea_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq DeleteIdentificationServiceAreaRequest
 	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq.Version); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
 
 	var (
 		val string
@@ -58,6 +67,14 @@ func request_DiscoveryAndSynchronizationService_DeleteIdentificationServiceArea_
 func request_DiscoveryAndSynchronizationService_DeleteSubscription_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq DeleteSubscriptionRequest
 	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq.Version); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
 
 	var (
 		val string
@@ -110,11 +127,11 @@ func request_DiscoveryAndSynchronizationService_GetSubscription_0(ctx context.Co
 }
 
 var (
-	filter_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0 = &utilities.DoubleArray{Encoding: map[string]int{"extents": 0, "id": 1}, Base: []int{1, 1, 2, 0, 0}, Check: []int{0, 1, 1, 2, 3}}
+	filter_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0 = &utilities.DoubleArray{Encoding: map[string]int{"extents": 0, "id": 1}, Base: []int{1, 1, 2, 0, 0}, Check: []int{0, 1, 1, 2, 3}}
 )
 
-func request_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq PutIdentificationServiceAreaRequest
+func request_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq PatchIdentificationServiceAreaRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -125,6 +142,99 @@ func request_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0(c
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.String(val)
+
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.PatchIdentificationServiceArea(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+var (
+	filter_DiscoveryAndSynchronizationService_PatchSubscription_0 = &utilities.DoubleArray{Encoding: map[string]int{"extents": 0, "id": 1}, Base: []int{1, 1, 2, 0, 0}, Check: []int{0, 1, 1, 2, 3}}
+)
+
+func request_DiscoveryAndSynchronizationService_PatchSubscription_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq PatchSubscriptionRequest
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq.Extents); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.String(val)
+
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DiscoveryAndSynchronizationService_PatchSubscription_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.PatchSubscription(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+var (
+	filter_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0 = &utilities.DoubleArray{Encoding: map[string]int{"extents": 0, "id": 1}, Base: []int{1, 1, 2, 0, 0}, Check: []int{0, 1, 1, 2, 3}}
+)
+
+func request_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq PutIdentificationServiceAreaRequest
+	var metadata runtime.ServerMetadata
+	fmt.Println("BODY: ", req.Body)
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq.Extents); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	fmt.Println("PROTO_REQ: ", protoReq)
 	var (
 		val string
 		ok  bool
@@ -339,6 +449,46 @@ func RegisterDiscoveryAndSynchronizationServiceHandlerClient(ctx context.Context
 
 	})
 
+	mux.Handle("PATCH", pattern_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("PATCH", pattern_DiscoveryAndSynchronizationService_PatchSubscription_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_DiscoveryAndSynchronizationService_PatchSubscription_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_DiscoveryAndSynchronizationService_PatchSubscription_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
 	mux.Handle("PUT", pattern_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -429,6 +579,10 @@ var (
 
 	pattern_DiscoveryAndSynchronizationService_GetSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dss", "subscriptions", "id"}, "", runtime.AssumeColonVerbOpt(true)))
 
+	pattern_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dss", "identification_service_areas", "id"}, "", runtime.AssumeColonVerbOpt(true)))
+
+	pattern_DiscoveryAndSynchronizationService_PatchSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dss", "subscriptions", "id"}, "", runtime.AssumeColonVerbOpt(true)))
+
 	pattern_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dss", "identification_service_areas", "id"}, "", runtime.AssumeColonVerbOpt(true)))
 
 	pattern_DiscoveryAndSynchronizationService_PutSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"dss", "subscriptions", "id"}, "", runtime.AssumeColonVerbOpt(true)))
@@ -444,6 +598,10 @@ var (
 	forward_DiscoveryAndSynchronizationService_DeleteSubscription_0 = runtime.ForwardResponseMessage
 
 	forward_DiscoveryAndSynchronizationService_GetSubscription_0 = runtime.ForwardResponseMessage
+
+	forward_DiscoveryAndSynchronizationService_PatchIdentificationServiceArea_0 = runtime.ForwardResponseMessage
+
+	forward_DiscoveryAndSynchronizationService_PatchSubscription_0 = runtime.ForwardResponseMessage
 
 	forward_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0 = runtime.ForwardResponseMessage
 
