@@ -38,6 +38,20 @@ func (s *Server) AuthScopes() map[string][]string {
 	}
 }
 
+func (s *Server) GetIdentificationServiceArea(ctx context.Context, req *dspb.GetIdentificationServiceAreaRequest) (*dspb.GetIdentificationServiceAreaResponse, error) {
+	isa, err := s.Store.GetIdentificationServiceArea(ctx, models.ID(req.GetId()))
+	if err != nil {
+		return nil, err
+	}
+	p, err := isa.ToProto()
+	if err != nil {
+		return nil, err
+	}
+	return &dspb.GetIdentificationServiceAreaResponse{
+		IdentificationServiceArea: p,
+	}, nil
+}
+
 func (s *Server) PatchIdentificationServiceArea(ctx context.Context, req *dspb.PatchIdentificationServiceAreaRequest) (*dspb.PatchIdentificationServiceAreaResponse, error) {
 	owner, ok := auth.OwnerFromContext(ctx)
 	if !ok {

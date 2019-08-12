@@ -53,6 +53,16 @@ message GeoPolygon {
     repeated LatLngPoint vertices = 1;
 }
 
+message GetIdentificationServiceAreaRequest {
+    // EntityUUID of the Identification Service Area.
+    string id = 1;
+}
+
+// Response to DSS query for isa's in a particular area.
+message GetIdentificationServiceAreaResponse {
+    IdentificationServiceArea identification_service_area = 1;
+}
+
 message GetSubscriptionRequest {
     // SubscriptionUUID of the subscription of interest.
     string id = 1;
@@ -319,6 +329,15 @@ service DSServiceV0 {
         option (google.api.http) = {
             delete: "/dss/v0/subscriptions/{id}"
             body: "version"
+        };
+    }
+
+    // /identification_service_areas/{id}
+    // 
+    // Verify the existence/valdity and state of a particular IdentificationServiceArea.
+    rpc GetIdentificationServiceArea(GetIdentificationServiceAreaRequest) returns (GetIdentificationServiceAreaResponse) {
+        option (google.api.http) = {
+            get: "/dss/v0/identification_service_areas/{id}"
         };
     }
 

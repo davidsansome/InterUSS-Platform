@@ -7,7 +7,6 @@ import (
 
 	"github.com/golang/geo/s2"
 	"github.com/lib/pq"
-	"github.com/steeling/InterUSS-Platform/pkg/dss"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dsserr "github.com/steeling/InterUSS-Platform/pkg/errors"
 	"go.uber.org/multierr"
@@ -121,8 +120,11 @@ func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Sub
 	)
 
 	cids := make([]int64, len(s.Cells))
+	clevels := make([]int, len(s.Cells))
+
 	for i, cell := range s.Cells {
 		cids[i] = int64(cell)
+		clevels[i] = cell.Level()
 	}
 
 	cells := s.Cells
@@ -138,8 +140,8 @@ func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Sub
 	}
 	s.Cells = cells
 
-	for _, cell := range s.Cells {
-		if _, err := q.ExecContext(ctx, subscriptionCellQuery, cell, cell.Level(), s.ID); err != nil {
+	for i := range cids {
+		if _, err := q.ExecContext(ctx, subscriptionCellQuery, cids[i], clevels[i], s.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -171,7 +173,7 @@ func (c *Store) InsertSubscription(ctx context.Context, s *models.Subscription) 
 	case err != nil:
 		return nil, multierr.Combine(err, tx.Rollback())
 	case err == nil:
-		return nil, multierr.Combine(dss.ErrAlreadyExists, tx.Rollback())
+		return nil, multierr.Combine(dsserr.AlreadyExists(s.ID.String()), tx.Rollback())
 	}
 
 	s, err = c.pushSubscription(ctx, tx, s)

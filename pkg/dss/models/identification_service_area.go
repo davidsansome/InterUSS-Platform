@@ -99,12 +99,21 @@ func (i *IdentificationServiceArea) SetExtents(extents *dspb.Volume4D) error {
 		}
 		i.EndTime = &ts
 	}
-	if wrapper := extents.GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
+
+	space := extents.GetSpatialVolume()
+	if space == nil {
+		return nil
+	}
+	if wrapper := space.GetAltitudeHi(); wrapper != nil {
 		i.AltitudeHi = ptrToFloat32(wrapper.GetValue())
 	}
-	if wrapper := extents.GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
+	if wrapper := space.GetAltitudeLo(); wrapper != nil {
 		i.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
-	i.Cells, err = geo.Volume4DToCellIDs(extents)
+	footprint := space.GetFootprint()
+	if footprint == nil {
+		return nil
+	}
+	i.Cells, err = geo.GeoPolygonToCellIDs(footprint)
 	return err
 }

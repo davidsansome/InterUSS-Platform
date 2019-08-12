@@ -101,6 +101,41 @@ paths:
         may lie entirely outside the requested area.
   /identification_service_areas/{id}:
     summary: An Identification Service Area in the DSS.
+    get:
+      tags:
+      - dss
+      operationId: getIdentificationServiceArea
+      parameters:
+      - name: id
+        description: EntityUUID of the Identification Service Area.
+        schema:
+          $ref: '#/definitions/UUIDv4'
+        in: path
+        required: true
+      responses:
+        200:
+          schema:
+            $ref: '#/definitions/GetIdentificationServiceAreaResponse'
+          description: IdentificationServiceArea information was retrieved successfully.
+        400:
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+          description: One or more input parameters were missing or invalid.
+        401:
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+          description: Bearer access token was not provided in Authorization header,
+            token could not be decoded, or token was invalid.
+        403:
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+          description: The access token was decoded successfully but did not include
+            a scope appropriate to this endpoint.
+      security:
+      - AuthFromAuthorizationAuthority:
+        - dss.read.position_reporting_entities
+      summary: /identification_service_areas/{id}
+      description: Verify the existence/valdity and state of a particular IdentificationServiceArea.
     put:
       tags:
       - dss
@@ -607,6 +642,14 @@ definitions:
     properties:
       subscription: 
         $ref: '#/definitions/Subscription'
+  GetIdentificationServiceAreaResponse:
+    description: Response to DSS query for isa's in a particular area.
+    required:
+    - identification_service_area
+    type: object
+    properties:
+      identification_service_area: 
+        $ref: '#/definitions/IdentificationServiceArea'
   URL:
     description: Valid http or https URL.
     pattern: '^https?:\/\/(?:\[[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}\]|[^\0\t\r\n

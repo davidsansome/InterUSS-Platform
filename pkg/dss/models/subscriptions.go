@@ -114,12 +114,22 @@ func (s *Subscription) SetExtents(extents *dspb.Volume4D) error {
 		}
 		s.EndTime = &ts
 	}
-	if wrapper := extents.GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
+
+	space := extents.GetSpatialVolume()
+	if space == nil {
+		return nil
+	}
+	if wrapper := space.GetAltitudeHi(); wrapper != nil {
 		s.AltitudeHi = ptrToFloat32(wrapper.GetValue())
 	}
-	if wrapper := extents.GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
+	if wrapper := space.GetAltitudeLo(); wrapper != nil {
 		s.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
-	s.Cells, err = geo.Volume4DToCellIDs(extents)
+	footprint := space.GetFootprint()
+	if footprint == nil {
+		return nil
+	}
+	s.Cells, err = geo.GeoPolygonToCellIDs(footprint)
+
 	return err
 }

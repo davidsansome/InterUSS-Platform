@@ -8,7 +8,6 @@ import (
 
 	"github.com/golang/geo/s2"
 	"github.com/lib/pq"
-	"github.com/steeling/InterUSS-Platform/pkg/dss"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 	dsserr "github.com/steeling/InterUSS-Platform/pkg/errors"
 	"go.uber.org/multierr"
@@ -141,38 +140,41 @@ func (c *Store) pushISA(ctx context.Context, q queryable, isa *models.Identifica
 	)
 
 	cids := make([]int64, len(isa.Cells))
+	clevels := make([]int, len(isa.Cells))
+
 	for i, cell := range isa.Cells {
 		cids[i] = int64(cell)
+		clevels[i] = cell.Level()
 	}
 
-	outISA := *isa
-	if err := q.QueryRowContext(ctx, upsertAreasQuery, isa.ID, isa.Owner, isa.Url, isa.StartTime, isa.EndTime).Scan(
-		&outISA.ID,
-		&outISA.Owner,
-		&outISA.Url,
-		&outISA.StartTime,
-		&outISA.EndTime,
-		&outISA.UpdatedAt,
-	); err != nil {
+	cells := isa.Cells
+	isa, err := c.fetchISA(ctx, q, upsertAreasQuery, isa.ID, isa.Owner, isa.Url, isa.StartTime, isa.EndTime)
+	if err != nil {
 		return nil, nil, err
 	}
+	isa.Cells = cells
 
-	for _, cell := range isa.Cells {
-		if _, err := q.ExecContext(ctx, upsertCellsForAreaQuery, cell, cell.Level(), outISA.ID); err != nil {
+	for i := range cids {
+		if _, err := q.ExecContext(ctx, upsertCellsForAreaQuery, cids[i], clevels[i], isa.ID); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	if _, err := q.ExecContext(ctx, deleteLeftOverCellsForAreaQuery, pq.Array(cids), outISA.ID); err != nil {
+	if _, err := q.ExecContext(ctx, deleteLeftOverCellsForAreaQuery, pq.Array(cids), isa.ID); err != nil {
 		return nil, nil, err
 	}
 
-	subscriptions, err := c.fetchSubscriptionsByCellsWithoutOwner(ctx, q, cids, outISA.Owner)
+	subscriptions, err := c.fetchSubscriptionsByCellsWithoutOwner(ctx, q, cids, isa.Owner)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &outISA, subscriptions, nil
+	return isa, subscriptions, nil
+}
+
+// Get returns the isa identified by "id".
+func (c *Store) GetIdentificationServiceArea(ctx context.Context, id models.ID) (*models.IdentificationServiceArea, error) {
+	return c.fetchISAByID(ctx, c.DB, id)
 }
 
 // InsertISA inserts the IdentificationServiceArea identified by "id" and owned
@@ -193,7 +195,7 @@ func (c *Store) InsertISA(ctx context.Context, isa *models.IdentificationService
 	case err != nil:
 		return nil, nil, multierr.Combine(err, tx.Rollback())
 	case err == nil:
-		return nil, nil, multierr.Combine(dss.ErrAlreadyExists, tx.Rollback())
+		return nil, nil, multierr.Combine(dsserr.AlreadyExists(isa.ID.String()), tx.Rollback())
 	}
 
 	area, subscribers, err := c.pushISA(ctx, tx, isa)

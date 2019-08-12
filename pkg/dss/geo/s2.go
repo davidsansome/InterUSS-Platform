@@ -3,7 +3,6 @@ package geo
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -123,10 +122,8 @@ func AreaToCellIDs(area string) (s2.CellUnion, error) {
 		return nil, errNotEnoughPointsInPolygon
 	}
 	scanner.Split(splitAtComma)
-	fmt.Println("scanning")
 
 	for scanner.Scan() {
-		fmt.Println("scanned")
 		trimmed := strings.TrimSpace(scanner.Text())
 		switch counter % 2 {
 		case 0:

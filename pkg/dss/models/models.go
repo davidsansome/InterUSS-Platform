@@ -41,6 +41,9 @@ func (v Version) String() string {
 
 func (v Version) ToTimestamp() (time.Time, error) {
 	var t time.Time
+	if v == "" {
+		return t, nil
+	}
 	nanos, err := strconv.ParseUint(string(v), versionBase, 64)
 	if err != nil {
 		return t, err

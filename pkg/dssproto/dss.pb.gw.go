@@ -98,6 +98,33 @@ func request_DSServiceV0_DeleteSubscription_0(ctx context.Context, marshaler run
 
 }
 
+func request_DSServiceV0_GetIdentificationServiceArea_0(ctx context.Context, marshaler runtime.Marshaler, client DSServiceV0Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetIdentificationServiceAreaRequest
+	var metadata runtime.ServerMetadata
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+	}
+
+	protoReq.Id, err = runtime.String(val)
+
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+	}
+
+	msg, err := client.GetIdentificationServiceArea(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
 func request_DSServiceV0_GetSubscription_0(ctx context.Context, marshaler runtime.Marshaler, client DSServiceV0Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetSubscriptionRequest
 	var metadata runtime.ServerMetadata
@@ -383,6 +410,26 @@ func RegisterDSServiceV0HandlerClient(ctx context.Context, mux *runtime.ServeMux
 
 	})
 
+	mux.Handle("GET", pattern_DSServiceV0_GetIdentificationServiceArea_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_DSServiceV0_GetIdentificationServiceArea_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_DSServiceV0_GetIdentificationServiceArea_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
 	mux.Handle("GET", pattern_DSServiceV0_GetSubscription_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -531,6 +578,8 @@ var (
 
 	pattern_DSServiceV0_DeleteSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"dss", "v0", "subscriptions", "id"}, "", runtime.AssumeColonVerbOpt(true)))
 
+	pattern_DSServiceV0_GetIdentificationServiceArea_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"dss", "v0", "identification_service_areas", "id"}, "", runtime.AssumeColonVerbOpt(true)))
+
 	pattern_DSServiceV0_GetSubscription_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"dss", "v0", "subscriptions", "id"}, "", runtime.AssumeColonVerbOpt(true)))
 
 	pattern_DSServiceV0_PatchIdentificationServiceArea_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"dss", "v0", "identification_service_areas", "id"}, "", runtime.AssumeColonVerbOpt(true)))
@@ -550,6 +599,8 @@ var (
 	forward_DSServiceV0_DeleteIdentificationServiceArea_0 = runtime.ForwardResponseMessage
 
 	forward_DSServiceV0_DeleteSubscription_0 = runtime.ForwardResponseMessage
+
+	forward_DSServiceV0_GetIdentificationServiceArea_0 = runtime.ForwardResponseMessage
 
 	forward_DSServiceV0_GetSubscription_0 = runtime.ForwardResponseMessage
 
