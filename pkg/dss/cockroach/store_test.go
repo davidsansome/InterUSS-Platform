@@ -104,7 +104,7 @@ func TestBuildURI(t *testing.T) {
 				"ssl_mode": "enable",
 				"ssl_dir":  "/tmp",
 			},
-			want: "postgresql://root@localhost:26257?sslmode=enable&sslrootcert=/tmp/ca.crt&sslcert=/tmp/client.root.crt&sslkey=/tmp/client.root.crt",
+			want: "postgresql://root@localhost:26257?sslmode=enable&sslrootcert=/tmp/ca.crt&sslcert=/tmp/client.root.crt&sslkey=/tmp/client.root.key",
 		},
 		{
 			name: "missing host",
