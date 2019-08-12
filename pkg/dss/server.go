@@ -19,10 +19,6 @@ var (
 	ReadISAScope  = "dss.read.identification_service_areas"
 )
 
-func ptrToFloat32(f float32) *float32 {
-	return &f
-}
-
 // Server implements dssproto.DiscoveryAndSynchronizationService.
 type Server struct {
 	Store Store
@@ -47,46 +43,22 @@ func (s *Server) PatchIdentificationServiceArea(ctx context.Context, req *dspb.P
 	if !ok {
 		return nil, dsserr.PermissionDenied("missing owner from context")
 	}
-
-	var (
-		starts *time.Time
-		ends   *time.Time
-	)
-	if startTime := req.GetExtents().GetStartTime(); startTime != nil {
-		ts, err := ptypes.Timestamp(startTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		starts = &ts
+	params := req.GetParams()
+	if params == nil {
+		return nil, dsserr.BadRequest("missing params")
 	}
 
-	if endTime := req.GetExtents().GetEndTime(); endTime != nil {
-		ts, err := ptypes.Timestamp(endTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		ends = &ts
-	}
-
-	updated, err := models.Version(req.GetVersion()).ToTimestamp()
+	updated, err := models.Version(params.GetVersion()).ToTimestamp()
 	if err != nil {
 		return nil, dsserr.BadRequest(err.Error())
 	}
 	isa := &models.IdentificationServiceArea{
 		ID:        models.ID(req.GetId()),
-		Url:       req.GetUrl().GetValue(),
+		Url:       params.GetUrl().GetValue(),
 		Owner:     owner,
-		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
-		StartTime: starts,
-		EndTime:   ends,
 		UpdatedAt: &updated,
 	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
-		isa.AltitudeHi = ptrToFloat32(wrapper.GetValue())
-	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
-		isa.AltitudeLo = ptrToFloat32(wrapper.GetValue())
-	}
+	isa.SetExtents(params.GetExtents())
 
 	isa, subscribers, err := s.Store.UpdateISA(ctx, isa)
 	if err != nil {
@@ -114,43 +86,17 @@ func (s *Server) PutIdentificationServiceArea(ctx context.Context, req *dspb.Put
 	if !ok {
 		return nil, dsserr.PermissionDenied("missing owner from context")
 	}
-	var (
-		starts *time.Time
-		ends   *time.Time
-	)
-	if req.GetExtents() == nil {
-		return nil, dsserr.BadRequest("no extents provided")
-	}
-	if startTime := req.GetExtents().GetStartTime(); startTime != nil {
-		ts, err := ptypes.Timestamp(startTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		starts = &ts
-	}
-
-	if endTime := req.GetExtents().GetEndTime(); endTime != nil {
-		ts, err := ptypes.Timestamp(endTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		ends = &ts
+	params := req.GetParams()
+	if params == nil {
+		return nil, dsserr.BadRequest("missing params")
 	}
 
 	isa := &models.IdentificationServiceArea{
-		ID:        models.ID(req.GetId()),
-		Url:       req.GetUrl(),
-		Owner:     owner,
-		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
-		StartTime: starts,
-		EndTime:   ends,
+		ID:    models.ID(req.GetId()),
+		Url:   params.GetUrl(),
+		Owner: owner,
 	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
-		isa.AltitudeHi = ptrToFloat32(wrapper.GetValue())
-	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
-		isa.AltitudeLo = ptrToFloat32(wrapper.GetValue())
-	}
+	isa.SetExtents(params.GetExtents())
 
 	isa, subscribers, err := s.Store.InsertISA(ctx, isa)
 	if err != nil {
@@ -310,42 +256,23 @@ func (s *Server) PatchSubscription(ctx context.Context, req *dspb.PatchSubscript
 	if !ok {
 		return nil, dsserr.PermissionDenied("missing owner from context")
 	}
-	var (
-		starts *time.Time
-		ends   *time.Time
-	)
-	if req.GetExtents() == nil {
-		return nil, dsserr.BadRequest("no extents provided")
+	params := req.GetParams()
+	if params == nil {
+		return nil, dsserr.BadRequest("missing params")
 	}
-	if startTime := req.GetExtents().GetStartTime(); startTime != nil {
-		ts, err := ptypes.Timestamp(startTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		starts = &ts
-	}
-
-	if endTime := req.GetExtents().GetEndTime(); endTime != nil {
-		ts, err := ptypes.Timestamp(endTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		ends = &ts
+	updated, err := models.Version(params.GetVersion()).ToTimestamp()
+	if err != nil {
+		return nil, dsserr.BadRequest(err.Error())
 	}
 
 	sub := &models.Subscription{
 		ID:        models.ID(req.GetId()),
-		Url:       req.GetUrl().GetValue(),
+		Url:       params.GetUrl().GetValue(),
 		Owner:     owner,
-		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
-		StartTime: starts,
-		EndTime:   ends,
+		UpdatedAt: &updated,
 	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
-		sub.AltitudeHi = ptrToFloat32(wrapper.GetValue())
-	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
-		sub.AltitudeLo = ptrToFloat32(wrapper.GetValue())
+	if err := sub.SetExtents(params.GetExtents()); err != nil {
+		return nil, dsserr.BadRequest("bad extents")
 	}
 
 	p, err := sub.ToProto()
@@ -363,42 +290,18 @@ func (s *Server) PutSubscription(ctx context.Context, req *dspb.PutSubscriptionR
 	if !ok {
 		return nil, dsserr.PermissionDenied("missing owner from context")
 	}
-	var (
-		starts *time.Time
-		ends   *time.Time
-	)
-	if req.GetExtents() == nil {
-		return nil, dsserr.BadRequest("no extents provided")
-	}
-	if startTime := req.GetExtents().GetStartTime(); startTime != nil {
-		ts, err := ptypes.Timestamp(startTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		starts = &ts
-	}
-
-	if endTime := req.GetExtents().GetEndTime(); endTime != nil {
-		ts, err := ptypes.Timestamp(endTime)
-		if err != nil {
-			return nil, dsserr.BadRequest(err.Error())
-		}
-		ends = &ts
+	params := req.GetParams()
+	if params == nil {
+		return nil, dsserr.BadRequest("missing params")
 	}
 
 	sub := &models.Subscription{
-		ID:        models.ID(req.GetId()),
-		Url:       req.GetUrl(),
-		Owner:     owner,
-		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
-		StartTime: starts,
-		EndTime:   ends,
+		ID:    models.ID(req.GetId()),
+		Url:   params.GetUrl(),
+		Owner: owner,
 	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
-		sub.AltitudeHi = ptrToFloat32(wrapper.GetValue())
-	}
-	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
-		sub.AltitudeLo = ptrToFloat32(wrapper.GetValue())
+	if err := sub.SetExtents(params.GetExtents()); err != nil {
+		return nil, dsserr.BadRequest("bad extents")
 	}
 
 	p, err := sub.ToProto()

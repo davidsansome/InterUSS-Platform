@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 
 	"github.com/golang/geo/s2"
@@ -91,4 +92,33 @@ func (s *Subscription) ToProto() (*dspb.Subscription, error) {
 		result.EndTime = ts
 	}
 	return result, nil
+}
+
+func (s *Subscription) SetExtents(extents *dspb.Volume4D) error {
+	if extents == nil {
+		return nil
+	}
+	if startTime := extents.GetStartTime(); startTime != nil {
+		ts, err := ptypes.Timestamp(startTime)
+		if err != nil {
+			return err
+		}
+		s.StartTime = &ts
+	}
+
+	if endTime := extents.GetEndTime(); endTime != nil {
+		ts, err := ptypes.Timestamp(endTime)
+		if err != nil {
+			return err
+		}
+		s.EndTime = &ts
+	}
+	if wrapper := extents.GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
+		s.AltitudeHi = ptrToFloat32(wrapper.GetValue())
+	}
+	if wrapper := extents.GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
+		s.AltitudeLo = ptrToFloat32(wrapper.GetValue())
+	}
+	s.Cells = geo.Volume4DToCellIDs(extents)
+	return nil
 }

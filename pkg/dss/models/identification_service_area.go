@@ -5,6 +5,7 @@ import (
 
 	"github.com/golang/geo/s2"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/steeling/InterUSS-Platform/pkg/dss/geo"
 	dspb "github.com/steeling/InterUSS-Platform/pkg/dssproto"
 )
 
@@ -76,4 +77,33 @@ func (i *IdentificationServiceArea) ToProto() (*dspb.IdentificationServiceArea, 
 		result.EndTime = ts
 	}
 	return result, nil
+}
+
+func (i *IdentificationServiceArea) SetExtents(extents *dspb.Volume4D) error {
+	if extents == nil {
+		return nil
+	}
+	if startTime := extents.GetStartTime(); startTime != nil {
+		ts, err := ptypes.Timestamp(startTime)
+		if err != nil {
+			return err
+		}
+		i.StartTime = &ts
+	}
+
+	if endTime := extents.GetEndTime(); endTime != nil {
+		ts, err := ptypes.Timestamp(endTime)
+		if err != nil {
+			return err
+		}
+		i.EndTime = &ts
+	}
+	if wrapper := extents.GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
+		i.AltitudeHi = ptrToFloat32(wrapper.GetValue())
+	}
+	if wrapper := extents.GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
+		i.AltitudeLo = ptrToFloat32(wrapper.GetValue())
+	}
+	i.Cells = geo.Volume4DToCellIDs(extents)
+	return nil
 }

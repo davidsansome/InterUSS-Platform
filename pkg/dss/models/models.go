@@ -47,3 +47,7 @@ func (v Version) ToTimestamp() (time.Time, error) {
 	}
 	return time.Unix(0, int64(nanos)), nil
 }
+
+func ptrToFloat32(f float32) *float32 {
+	return &f
+}

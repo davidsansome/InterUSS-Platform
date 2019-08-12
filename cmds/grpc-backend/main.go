@@ -87,7 +87,7 @@ func RunGRPCServer(ctx context.Context, address string) error {
 		reflection.Register(s)
 	}
 
-	dssproto.RegisterDiscoveryAndSynchronizationServiceServer(s, dssServer)
+	dssproto.RegisterDSServiceV0Server(s, dssServer)
 
 	go func() {
 		defer s.GracefulStop()
