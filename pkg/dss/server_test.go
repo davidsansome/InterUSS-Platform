@@ -51,6 +51,11 @@ func (ms *mockStore) SearchSubscriptions(ctx context.Context, cells s2.CellUnion
 	return args.Get(0).([]*models.Subscription), args.Error(1)
 }
 
+func (ms *mockStore) GetISA(ctx context.Context, id models.ID) (*models.IdentificationServiceArea, error) {
+	args := ms.Called(ctx, id)
+	return args.Get(0).(*models.IdentificationServiceArea), args.Error(1)
+}
+
 func (ms *mockStore) DeleteISA(ctx context.Context, id models.ID, owner models.Owner, version models.Version) (*models.IdentificationServiceArea, []*models.Subscription, error) {
 	args := ms.Called(ctx, id, owner, version)
 	return args.Get(0).(*models.IdentificationServiceArea), args.Get(1).([]*models.Subscription), args.Error(2)

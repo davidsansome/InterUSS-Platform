@@ -12,7 +12,7 @@ type Store interface {
 	// Close closes the store and should release all resources.
 	Close() error
 
-	GetIdentificationServiceArea(ctx context.Context, id models.ID) (*models.IdentificationServiceArea, error)
+	GetISA(ctx context.Context, id models.ID) (*models.IdentificationServiceArea, error)
 
 	// Delete deletes the IdentificationServiceArea identified by "id" and owned by "owner".
 	// Returns the delete IdentificationServiceArea and all Subscriptions affected by the delete.

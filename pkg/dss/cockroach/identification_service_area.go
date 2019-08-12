@@ -173,7 +173,7 @@ func (c *Store) pushISA(ctx context.Context, q queryable, isa *models.Identifica
 }
 
 // Get returns the isa identified by "id".
-func (c *Store) GetIdentificationServiceArea(ctx context.Context, id models.ID) (*models.IdentificationServiceArea, error) {
+func (c *Store) GetISA(ctx context.Context, id models.ID) (*models.IdentificationServiceArea, error) {
 	return c.fetchISAByID(ctx, c.DB, id)
 }
 

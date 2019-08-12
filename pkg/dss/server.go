@@ -39,7 +39,7 @@ func (s *Server) AuthScopes() map[string][]string {
 }
 
 func (s *Server) GetIdentificationServiceArea(ctx context.Context, req *dspb.GetIdentificationServiceAreaRequest) (*dspb.GetIdentificationServiceAreaResponse, error) {
-	isa, err := s.Store.GetIdentificationServiceArea(ctx, models.ID(req.GetId()))
+	isa, err := s.Store.GetISA(ctx, models.ID(req.GetId()))
 	if err != nil {
 		return nil, err
 	}
