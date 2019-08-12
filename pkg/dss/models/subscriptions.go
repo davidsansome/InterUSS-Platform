@@ -10,19 +10,16 @@ import (
 )
 
 type Subscription struct {
-	// Embed the proto
-	// Unfortunately some types don't implement scanner/valuer, so we add placeholders below.
 	ID                ID
 	Url               string
 	NotificationIndex int
 	Owner             Owner
 	Cells             s2.CellUnion
-	// TODO(steeling): abstract NullTime away from models.
-	StartTime  *time.Time
-	EndTime    *time.Time
-	UpdatedAt  *time.Time
-	AltitudeHi *float32
-	AltitudeLo *float32
+	StartTime         *time.Time
+	EndTime           *time.Time
+	UpdatedAt         *time.Time
+	AltitudeHi        *float32
+	AltitudeLo        *float32
 }
 
 // Apply fields from s2 onto s, preferring any fields set in s2 except for ID

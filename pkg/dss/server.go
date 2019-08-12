@@ -154,9 +154,6 @@ func (s *Server) PutIdentificationServiceArea(ctx context.Context, req *dspb.Put
 
 	isa, subscribers, err := s.Store.InsertISA(ctx, isa)
 	if err != nil {
-		// TODO(tvoss): Revisit once error propagation strategy is defined. We
-		// might want to avoid leaking raw error messages to callers and instead
-		// just return a generic error indicating a request ID.
 		return nil, err
 	}
 
@@ -297,9 +294,6 @@ func (s *Server) SearchSubscriptions(ctx context.Context, req *dspb.SearchSubscr
 func (s *Server) GetSubscription(ctx context.Context, req *dspb.GetSubscriptionRequest) (*dspb.GetSubscriptionResponse, error) {
 	subscription, err := s.Store.GetSubscription(ctx, models.ID(req.GetId()))
 	if err != nil {
-		// TODO(tvoss): Revisit once error propagation strategy is defined. We
-		// might want to avoid leaking raw error messages to callers and instead
-		// just return a generic error indicating a request ID.
 		return nil, err
 	}
 	p, err := subscription.ToProto()
@@ -341,7 +335,7 @@ func (s *Server) PatchSubscription(ctx context.Context, req *dspb.PatchSubscript
 
 	sub := &models.Subscription{
 		ID:        models.ID(req.GetId()),
-		Url:       req.GetUrl(),
+		Url:       req.GetUrl().GetValue(),
 		Owner:     owner,
 		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
 		StartTime: starts,
@@ -354,7 +348,7 @@ func (s *Server) PatchSubscription(ctx context.Context, req *dspb.PatchSubscript
 		sub.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
 
-	p, err := subscription.ToProto()
+	p, err := sub.ToProto()
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +401,7 @@ func (s *Server) PutSubscription(ctx context.Context, req *dspb.PutSubscriptionR
 		sub.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
 
-	p, err := subscription.ToProto()
+	p, err := sub.ToProto()
 	if err != nil {
 		return nil, err
 	}

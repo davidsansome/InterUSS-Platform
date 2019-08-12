@@ -9,13 +9,10 @@ import (
 )
 
 type IdentificationServiceArea struct {
-	// Embed the proto
-	// Unfortunately some types don't implement scanner/valuer, so we add placeholders below.
-	ID    ID
-	Url   string
-	Owner Owner
-	Cells s2.CellUnion
-	// TODO(steeling): abstract NullTime away from models.
+	ID         ID
+	Url        string
+	Owner      Owner
+	Cells      s2.CellUnion
 	StartTime  *time.Time
 	EndTime    *time.Time
 	UpdatedAt  *time.Time
@@ -49,7 +46,6 @@ func (s *IdentificationServiceArea) Apply(i2 *IdentificationServiceArea) *Identi
 	if i2.AltitudeHi != nil {
 		new.AltitudeHi = i2.AltitudeHi
 	}
-	// TODO(steeling) what if the update is to make it 0, we need an omitempty, pointer, or some other type.
 	if i2.AltitudeLo != nil {
 		new.AltitudeLo = i2.AltitudeLo
 	}

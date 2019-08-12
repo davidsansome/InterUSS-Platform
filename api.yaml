@@ -668,7 +668,9 @@ definitions:
     description: Valid http or https URL.
     pattern: '^https?:\/\/(?:\[[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}\]|[^\0\t\r\n
       #%\/:?@[\\\]]{1,63}(?:\.[^\0\t\r\n #%\/:?@[\\\]]{1,63}){1,126})(?::\d{1,5})?\/?'
-    type: string
+    type: 
+      - string
+      - "null"
   SubscriptionNotificationIndex:
     format: int32
     description: Tracks the notifications sent for a subscription so the subscriber
@@ -918,7 +920,9 @@ definitions:
   SubscriptionCallbacks:
     description: Endpoints that should be called when an applicable event occurs.  At
       least one field must be specified.
-    type: string
+    type: 
+      - string
+      - "null"
   PatchSubscriptionResponse:
     description: Response for a request to update a subscription.
     required:

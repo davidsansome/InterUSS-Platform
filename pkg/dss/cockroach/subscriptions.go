@@ -13,6 +13,9 @@ import (
 	"go.uber.org/multierr"
 )
 
+var subscriptionFields = "subscriptions.id, subscriptions.owner, subscriptions.url, subscriptions.notification_index, subscriptions.starts_at, subscriptions.ends_at, subscriptions.updated_at"
+var subscriptionFieldsWithoutPrefix = "id, owner, url, notification_index, starts_at, ends_at, updated_at"
+
 func (c *Store) fetchSubscriptions(ctx context.Context, q queryable, query string, args ...interface{}) ([]*models.Subscription, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -45,10 +48,9 @@ func (c *Store) fetchSubscriptions(ctx context.Context, q queryable, query strin
 }
 
 func (c *Store) fetchSubscriptionsByCellsWithoutOwner(ctx context.Context, q queryable, cells []int64, owner models.Owner) ([]*models.Subscription, error) {
-	const (
-		subscriptionsQuery = `
+	var subscriptionsQuery = fmt.Sprintf(`
 		 SELECT
-				subscriptions.*
+				%s
 			FROM
 				subscriptions
 			LEFT JOIN 
@@ -58,14 +60,12 @@ func (c *Store) fetchSubscriptionsByCellsWithoutOwner(ctx context.Context, q que
 			ON
 				subscriptions.id = unique_subscription_ids.subscription_id
 			WHERE
-				subscriptions.owner != $2`
-	)
+				subscriptions.owner != $2`, subscriptionFields)
 
 	return c.fetchSubscriptions(ctx, q, subscriptionsQuery, pq.Array(cells), owner)
 }
 
 func (c *Store) fetchSubscription(ctx context.Context, q queryable, query string, args ...interface{}) (*models.Subscription, error) {
-	// TODO(steeling) don't fetch by *
 	subs, err := c.fetchSubscriptions(ctx, q, query, args...)
 	if err != nil {
 		return nil, err
@@ -73,7 +73,6 @@ func (c *Store) fetchSubscription(ctx context.Context, q queryable, query string
 	if len(subs) > 1 {
 		return nil, multierr.Combine(err, fmt.Errorf("query returned %d subscriptions", len(subs)))
 	}
-	// TODO(steeling) shouldn't this already be returned?
 	if len(subs) == 0 {
 		return nil, sql.ErrNoRows
 	}
@@ -81,34 +80,34 @@ func (c *Store) fetchSubscription(ctx context.Context, q queryable, query string
 }
 
 func (c *Store) fetchSubscriptionByID(ctx context.Context, q queryable, id models.ID) (*models.Subscription, error) {
-	// TODO(steeling) don't fetch by *
-	const query = `SELECT * FROM subscriptions WHERE id = $1`
+	var query = fmt.Sprintf(`SELECT %s FROM subscriptions WHERE id = $1`, subscriptionFields)
 	return c.fetchSubscription(ctx, q, query, id)
 }
 
 func (c *Store) fetchSubscriptionByIDAndOwner(ctx context.Context, q queryable, id models.ID, owner models.Owner) (*models.Subscription, error) {
-	// TODO(steeling) don't fetch by *
-	const query = `
-		SELECT * FROM
+	var query = fmt.Sprintf(`
+		SELECT %s FROM
 			subscriptions
 		WHERE
 			id = $1
-			AND owner = $2`
+			AND owner = $2`, subscriptionFields)
 	return c.fetchSubscription(ctx, q, query, id, owner)
 }
 
 func (c *Store) pushSubscription(ctx context.Context, q queryable, s *models.Subscription) (*models.Subscription, error) {
-	const (
-		upsertQuery = `
+	var (
+		upsertQuery = fmt.Sprintf(`
 		UPSERT INTO
 		  subscriptions
+		  (%s)
 		VALUES
 			($1, $2, $3, $4, $5, $6, transaction_timestamp())
 		RETURNING
-			*`
+			%s`, subscriptionFieldsWithoutPrefix, subscriptionFields)
 		subscriptionCellQuery = `
 		UPSERT INTO
 			cells_subscriptions
+			(cell_id, cell_level, subscription_id)
 		VALUES
 			($1, $2, $3)
 		`
@@ -256,10 +255,10 @@ func (c *Store) DeleteSubscription(ctx context.Context, id models.ID, owner mode
 
 // SearchSubscriptions returns all subscriptions in "cells".
 func (c *Store) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, owner models.Owner) ([]*models.Subscription, error) {
-	const (
-		query = `
+	var (
+		query = fmt.Sprintf(`
 			SELECT
-				subscriptions.*
+				%s
 			FROM
 				subscriptions
 			LEFT JOIN 
@@ -269,7 +268,7 @@ func (c *Store) SearchSubscriptions(ctx context.Context, cells s2.CellUnion, own
 			ON
 				subscriptions.id = unique_subscription_ids.subscription_id
 			WHERE
-				subscriptions.owner = $2`
+				subscriptions.owner = $2`, subscriptionFields)
 	)
 
 	if len(cells) == 0 {

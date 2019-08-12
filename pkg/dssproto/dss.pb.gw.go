@@ -10,7 +10,6 @@ package dssproto
 
 import (
 	"context"
-	fmt "fmt"
 	"io"
 	"net/http"
 
@@ -225,7 +224,6 @@ var (
 func request_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0(ctx context.Context, marshaler runtime.Marshaler, client DiscoveryAndSynchronizationServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq PutIdentificationServiceAreaRequest
 	var metadata runtime.ServerMetadata
-	fmt.Println("BODY: ", req.Body)
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
 	if berr != nil {
@@ -234,7 +232,6 @@ func request_DiscoveryAndSynchronizationService_PutIdentificationServiceArea_0(c
 	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq.Extents); err != nil && err != io.EOF {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	fmt.Println("PROTO_REQ: ", protoReq)
 	var (
 		val string
 		ok  bool
