@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Paths to directories in which to store certificates and generated YAML files.
-NAMESPACE=wing-remoteid-1-us-central1
+NAMESPACE=
 CLIENTS_CERTS_DIR=$(pwd)/generated/$NAMESPACE/client_certs_dir
 NODE_CERTS_DIR=$(pwd)/generated/$NAMESPACE/node_certs_dir
 DIR=$(pwd)

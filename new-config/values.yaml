@@ -1,6 +1,6 @@
 # Required
 PublicAddr: # Public load balancer IP that was generated from make-certs.py
-namespace: wing-remoteid-1-us-central1
+namespace:
 storageClass: # Name of the storage class for your cluster you want the nodes to use. (i.e. managed-premium)
 
 #Optionally edit

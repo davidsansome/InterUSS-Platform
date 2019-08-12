@@ -42,13 +42,12 @@ class CockroachCluster():
 
 # EDIT/UNCOMMENT THIS!!
 
-create_clusters = [
-    CockroachCluster(
-        namespace='wing-remoteid-1-us-central1',
-        context='gke_google.com:wing-opensky_us-central1-a_remoteid-1',
-    ),
-]
-
+# create_clusters = [
+#     CockroachCluster(
+#         namespace='',
+#         context='',
+#     ),
+# ]
 
 join_clusters = [
     # CockroachCluster(
