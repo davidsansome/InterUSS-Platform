@@ -80,6 +80,7 @@ func (i *IdentificationServiceArea) ToProto() (*dspb.IdentificationServiceArea, 
 }
 
 func (i *IdentificationServiceArea) SetExtents(extents *dspb.Volume4D) error {
+	var err error
 	if extents == nil {
 		return nil
 	}
@@ -104,6 +105,6 @@ func (i *IdentificationServiceArea) SetExtents(extents *dspb.Volume4D) error {
 	if wrapper := extents.GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
 		i.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
-	i.Cells = geo.Volume4DToCellIDs(extents)
-	return nil
+	i.Cells, err = geo.Volume4DToCellIDs(extents)
+	return err
 }

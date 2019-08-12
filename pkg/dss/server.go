@@ -58,7 +58,9 @@ func (s *Server) PatchIdentificationServiceArea(ctx context.Context, req *dspb.P
 		Owner:     owner,
 		UpdatedAt: &updated,
 	}
-	isa.SetExtents(params.GetExtents())
+	if err := isa.SetExtents(params.GetExtents()); err != nil {
+		return nil, err
+	}
 
 	isa, subscribers, err := s.Store.UpdateISA(ctx, isa)
 	if err != nil {
@@ -96,7 +98,10 @@ func (s *Server) PutIdentificationServiceArea(ctx context.Context, req *dspb.Put
 		Url:   params.GetUrl(),
 		Owner: owner,
 	}
-	isa.SetExtents(params.GetExtents())
+
+	if err := isa.SetExtents(params.GetExtents()); err != nil {
+		return nil, err
+	}
 
 	isa, subscribers, err := s.Store.InsertISA(ctx, isa)
 	if err != nil {

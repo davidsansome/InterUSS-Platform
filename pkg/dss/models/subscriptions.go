@@ -95,6 +95,7 @@ func (s *Subscription) ToProto() (*dspb.Subscription, error) {
 }
 
 func (s *Subscription) SetExtents(extents *dspb.Volume4D) error {
+	var err error
 	if extents == nil {
 		return nil
 	}
@@ -119,6 +120,6 @@ func (s *Subscription) SetExtents(extents *dspb.Volume4D) error {
 	if wrapper := extents.GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
 		s.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
-	s.Cells = geo.Volume4DToCellIDs(extents)
-	return nil
+	s.Cells, err = geo.Volume4DToCellIDs(extents)
+	return err
 }
