@@ -2,7 +2,6 @@ package dss
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
@@ -115,10 +114,6 @@ func (s *Server) PutIdentificationServiceArea(ctx context.Context, req *dspb.Put
 	if !ok {
 		return nil, dsserr.PermissionDenied("missing owner from context")
 	}
-	fmt.Println("hello!")
-	fmt.Println(req)
-	fmt.Println(req.GetExtents() == nil)
-	fmt.Println(&dspb.PutIdentificationServiceAreaRequest{Extents: &dspb.Volume4D{StartTime: ptypes.TimestampNow()}})
 	var (
 		starts *time.Time
 		ends   *time.Time
@@ -317,17 +312,99 @@ func (s *Server) GetSubscription(ctx context.Context, req *dspb.GetSubscriptionR
 }
 
 func (s *Server) PatchSubscription(ctx context.Context, req *dspb.PatchSubscriptionRequest) (*dspb.PatchSubscriptionResponse, error) {
-	return nil, nil
+	owner, ok := auth.OwnerFromContext(ctx)
+	if !ok {
+		return nil, dsserr.PermissionDenied("missing owner from context")
+	}
+	var (
+		starts *time.Time
+		ends   *time.Time
+	)
+	if req.GetExtents() == nil {
+		return nil, dsserr.BadRequest("no extents provided")
+	}
+	if startTime := req.GetExtents().GetStartTime(); startTime != nil {
+		ts, err := ptypes.Timestamp(startTime)
+		if err != nil {
+			return nil, dsserr.BadRequest(err.Error())
+		}
+		starts = &ts
+	}
+
+	if endTime := req.GetExtents().GetEndTime(); endTime != nil {
+		ts, err := ptypes.Timestamp(endTime)
+		if err != nil {
+			return nil, dsserr.BadRequest(err.Error())
+		}
+		ends = &ts
+	}
+
+	sub := &models.Subscription{
+		ID:        models.ID(req.GetId()),
+		Url:       req.GetUrl(),
+		Owner:     owner,
+		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
+		StartTime: starts,
+		EndTime:   ends,
+	}
+	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
+		sub.AltitudeHi = ptrToFloat32(wrapper.GetValue())
+	}
+	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
+		sub.AltitudeLo = ptrToFloat32(wrapper.GetValue())
+	}
+
+	p, err := subscription.ToProto()
+	if err != nil {
+		return nil, err
+	}
+	return &dspb.PatchSubscriptionResponse{
+		Subscription: p,
+	}, nil
 }
 
+// TODO(steeling) openapi 2 spec requires only 1 parameter in the body
 func (s *Server) PutSubscription(ctx context.Context, req *dspb.PutSubscriptionRequest) (*dspb.PutSubscriptionResponse, error) {
 	owner, ok := auth.OwnerFromContext(ctx)
 	if !ok {
 		return nil, dsserr.PermissionDenied("missing owner from context")
 	}
-	subscription := &models.Subscription{
-		Owner: owner,
-		Url:   req.GetUrl(),
+	var (
+		starts *time.Time
+		ends   *time.Time
+	)
+	if req.GetExtents() == nil {
+		return nil, dsserr.BadRequest("no extents provided")
+	}
+	if startTime := req.GetExtents().GetStartTime(); startTime != nil {
+		ts, err := ptypes.Timestamp(startTime)
+		if err != nil {
+			return nil, dsserr.BadRequest(err.Error())
+		}
+		starts = &ts
+	}
+
+	if endTime := req.GetExtents().GetEndTime(); endTime != nil {
+		ts, err := ptypes.Timestamp(endTime)
+		if err != nil {
+			return nil, dsserr.BadRequest(err.Error())
+		}
+		ends = &ts
+	}
+
+	sub := &models.Subscription{
+		ID:        models.ID(req.GetId()),
+		Url:       req.GetUrl(),
+		Owner:     owner,
+		Cells:     geo.Volume4DToCellIDs(req.GetExtents()),
+		StartTime: starts,
+		EndTime:   ends,
+	}
+	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeHi(); wrapper != nil {
+		sub.AltitudeHi = ptrToFloat32(wrapper.GetValue())
+	}
+	if wrapper := req.GetExtents().GetSpatialVolume().GetAltitudeLo(); wrapper != nil {
+		sub.AltitudeLo = ptrToFloat32(wrapper.GetValue())
 	}
 
 	p, err := subscription.ToProto()

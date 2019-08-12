@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 	"github.com/steeling/InterUSS-Platform/pkg/dss"
 	"github.com/steeling/InterUSS-Platform/pkg/dss/models"
 
@@ -79,7 +79,7 @@ func TestDatabaseEnsuresBeginsBeforeExpires(t *testing.T) {
 		expires = begins.Add(-5 * time.Minute)
 	)
 	_, err := store.InsertSubscription(ctx, &models.Subscription{
-		ID:                models.ID(uuid.NewV4().String()),
+		ID:                models.ID(uuid.New().String()),
 		Owner:             "me-myself-and-i",
 		Url:               "https://no/place/like/home",
 		NotificationIndex: 42,
