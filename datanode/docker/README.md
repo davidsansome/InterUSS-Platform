@@ -15,14 +15,9 @@ requires a separate Zookeeper instance to operate.
 ### docker-compose_storageapitest.yaml
 
 This docker-compose configuration tests the storage API image above by
-instantiating a storage API container along with a connected Zookeeper node in
+instantiating a storage API container along with a connected CockroachDB node in
 stand alone mode. With this system up, the InterUSS Platform storage API is
 exposed on localhost:INTERUSS_API_PORT.
-
-### Dockerfile_reverseproxy
-
-This Dockerfile builds an image containing an nginx reverse proxy intended to
-gate requests to the storage API and provide HTTPS access to the API.
 
 ### docker-compose.yaml
 
@@ -74,9 +69,8 @@ docker-compose -p datanode up
 
 By default, the data node docker-compose configuration will serve HTTPS
 requests on port 8121 using a test self-signed certificate included in this
-repository. This is insecure, and a warning will be displayed in the nginx
-container. To provide a secure HTTPS connection, a different certificate must
-be provided.
+repository. This is insecure, to provide a secure HTTPS connection,
+a different certificate must be provided.
 
 To generate a self-signed certificate, run this command on the host system:
 

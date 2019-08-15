@@ -15,17 +15,14 @@
 # Definition for Docker image that runs the InterUSS Platform storage API server.
 
 # To build an image from this Dockerfile:
-# docker image build -f Dockerfile_storageapi -t interussplatform/storage_api:tcl4 ../src
-# docker tag interussplatform/storage_api:tcl4 interussplatform/storage_api:tcl4.2.0.014
+# docker image build -f Dockerfile_wing_aws -t interussplatform/storage_api:tcl4_wing_gcp ../src
+# docker tag interussplatform/storage_api:tcl4 interussplatform/storage_api:tcl4_wing_gcp.2.0.014
 
 # To run this image:
-# docker run \
-#     -e INTERUSS_CONNECTIONSTRING="zookeeper_ip:2181" \
-#     -e INTERUSS_PUBLIC_KEY="${INTERUSS_PUBLIC_KEY}" \
-#     -p 8121:8121 -d interussplatform/storage_api:tcl4
+# docker run -p 8121:8121 -d interussplatform/storage_api:tcl4_wing_gcp
 
 # Required environment variables:
-#   INTERUSS_CONNECTIONSTRING: Set of Zookeeper servers to which the storage API should connect.
+#   INTERUSS_CONNECTIONSTRING: Set of Cockroach db servers to which the storage API should connect.
 #     Format: server:port,server:port,...
 #   INTERUSS_PUBLIC_KEY: Public key for InterUSS Platform OAuth.
 
@@ -35,15 +32,24 @@
 #   INTERUSS_VERBOSE: True for more log messages from the InterUSS API (default true)
 #   INTERUSS_TESTID: Force testing mode with test data located in specific test id
 
-FROM python:2
+FROM python:2.7-alpine
 
 WORKDIR /usr/src/app
 
-RUN pip install --no-cache-dir python-dateutil kazoo flask PyJWT djangorestframework cryptography pytz gunicorn shapely
+RUN apk update && apk add \
+    --repository http://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    --repository http://dl-cdn.alpinelinux.org/alpine/edge/main \
+    geos-dev
+
+RUN apk update && \
+    apk add --virtual build-deps gcc python-dev musl-dev libressl-dev libffi-dev libc-dev && \
+    apk add postgresql-dev
+
+RUN pip install --no-cache-dir python-dateutil kazoo flask PyJWT djangorestframework cryptography pytz gunicorn shapely psycopg2
 
 COPY . .
-
-ENV INTERUSS_API_SERVER 0.0.0.0
+ENV INTERUSS_PUBLIC_KEY="__PUBLIC___"
+ENV INTERUSS_CONNECTIONSTRING "postgresql://root@localhost:26257?sslmode=disable&sslrootcert=/client-certs/ca.crt&sslcert=/client-certs/client.root.crt&sslkey=/client-certs/client.root.key"
 ENV INTERUSS_API_PORT 8121
 ENV INTERUSS_VERBOSE true
 
