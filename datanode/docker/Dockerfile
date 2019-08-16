@@ -15,11 +15,11 @@
 # Definition for Docker image that runs the InterUSS Platform storage API server.
 
 # To build an image from this Dockerfile:
-# docker image build -f Dockerfile_wing_aws -t interussplatform/storage_api:tcl4_wing_gcp ../src
-# docker tag interussplatform/storage_api:tcl4 interussplatform/storage_api:tcl4_wing_gcp.2.0.014
+# docker image build -f Dockerfile -t interussplatform/storage_api:tcl4 ../src
+# docker tag interussplatform/storage_api:tcl4 interussplatform/storage_api:tcl4.2.0.014
 
 # To run this image:
-# docker run -p 8121:8121 -d interussplatform/storage_api:tcl4_wing_gcp
+# docker run -p 8121:8121 -d interussplatform/storage_api:tcl4
 
 # Required environment variables:
 #   INTERUSS_CONNECTIONSTRING: Set of Cockroach db servers to which the storage API should connect.
@@ -49,11 +49,10 @@ RUN pip install --no-cache-dir python-dateutil kazoo flask PyJWT djangorestframe
 
 COPY . .
 ENV INTERUSS_PUBLIC_KEY="__PUBLIC___"
-ENV INTERUSS_CONNECTIONSTRING "postgresql://root@localhost:26257?sslmode=disable&sslrootcert=/client-certs/ca.crt&sslcert=/client-certs/client.root.crt&sslkey=/client-certs/client.root.key"
+ENV INTERUSS_CONNECTIONSTRING "postgresql://root@localhost:26257/defaultdb?sslmode=disable"
 ENV INTERUSS_API_PORT 8121
 ENV INTERUSS_VERBOSE true
 
-CMD gunicorn storage_api:webapp -b ${INTERUSS_API_SERVER}:${INTERUSS_API_PORT} --access-logfile -
 # CMD [ "python", "./storage_api.py" ]
 
-EXPOSE $INTERUSS_API_PORT
+CMD gunicorn storage_api:webapp -b ${INTERUSS_API_SERVER}:${INTERUSS_API_PORT} --access-logfile -
