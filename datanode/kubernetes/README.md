@@ -17,8 +17,10 @@
 - Builds a certificate directory structure
 - Creates certificates within their respective directory to be used by the `apply-certs.sh` script.
 
-5. Fill out the `NAMESPACE` and `CLUSTER_INIT` variables at the top of `apply-certs.sh` and then run it to load the secrets into the script. This script will delete existing secrets on the cluster named `cockroachdb.client.root` and it will also create secrets on the cluster containing the certificates that were generated from the python script.
-6. Fill out the `values.yaml` file with at minimum the PublicAddr, namespace, and storageClass values.
-7. Run `helm template . > cockroachdb.yaml` to render the YAML.
-8. Run `kubectl apply -f cockroackdb.yaml` to apply it to the cluster.
-9. Make every node's IP address external and static. Ensure you're firewall rules will allow other operators' nodes to join.
+6. Fill out the `NAMESPACE` and `CLUSTER_INIT` variables at the top of `apply-certs.sh` and then run it to load the secrets into the script. This script will delete existing secrets on the cluster named `cockroachdb.client.root` and it will also create secrets on the cluster containing the certificates that were generated from the python script.
+7. Fill out the `values.yaml` file with at minimum the ips, namespace, and storageClass values.
+8. Run `helm template . > cockroachdb.yaml` to render the YAML.
+9. Run `kubectl apply -f cockroackdb.yaml` to apply it to the cluster.
+10. Now that you have some pods, run `./expose.sh` to create an external IP for each pod.
+11. Make sure that all of your necessary IP's are static.
+12. Fill in these new IP addresses in make-certs and values.yaml file. Repeat steps 5-9

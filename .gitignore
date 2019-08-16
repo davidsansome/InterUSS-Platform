@@ -60,6 +60,9 @@ db.sqlite3
 instance/
 .webassets-cache
 
+
+datanode/kubernetes/generated/
+
 # Scrapy stuff:
 .scrapy
 

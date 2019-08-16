@@ -8,14 +8,13 @@ from subprocess import check_call, check_output
 from sys import exit
 from time import sleep
 
-# This script builds a loadbalancer in the specified namespace and context and then generates certificates.
+# This script builds a loadbalancer in the specified namespace and then generates certificates.
 
 
 class CockroachCluster():
 
-    def __init__(self, namespace='', context='', ca_certs_file='', node_addrs=None):
+    def __init__(self, namespace='', ca_certs_file='', node_addrs=None):
         self.namespace = namespace
-        self.context = context
         if ca_certs_file:
             self.ca_certs_file = ca_certs_file
         self.node_addrs = node_addrs or []
@@ -44,23 +43,27 @@ class CockroachCluster():
 
 # create_clusters = [
 #     CockroachCluster(
-#         namespace='',
-#         context='',
+#         namespace=,
+#         node_addrs = [
+#         ]
 #     ),
 # ]
 
 join_clusters = [
-    # CockroachCluster(
-    #   node_addrs=[],  # should correspond to the advertise addr flag of the other nodes. Can use wildcard notation.
-    #   ca_certs_file='path_to_ca_public_cert',
-    # ),
+    CockroachCluster(
+      node_addrs=[
+        '146.148.72.250',
+        '35.222.218.83',
+        '35.193.190.246'],
+      ca_certs_file='wing-ca.crt',
+    ),
 ]
 
 flatten = lambda l: [item for sublist in l for item in sublist]
-def other_node_addrs():
+def node_addrs():
     addrs = []
 
-    return flatten([cr.node_addrs for cr in join_clusters])
+    return flatten([cr.node_addrs for cr in join_clusters + create_clusters])
 
 
 
@@ -115,5 +118,5 @@ for cr in create_clusters:
     check_call(['cp %s %s ' % (cr.client_certs_dir +
                                '/*', cr.node_certs_dir)], shell=True)
 
-    check_call(['cockroach', 'cert', 'create-node', '--certs-dir', cr.node_certs_dir, '--ca-key', cr.ca_certs_dir+'/ca.key', 'localhost', '127.0.0.1', 'cockroachdb-public', 'cockroachdb-public.default',
-                'cockroachdb-public.'+cr.namespace, 'cockroachdb-public.%s.svc.cluster.local' % (cr.namespace), '*.cockroachdb', '*.cockroachdb.'+cr.namespace, 'cockroachdb.'+cr.namespace, '*.cockroachdb.%s.svc.cluster.local' % (cr.namespace)] + other_node_addrs())
+    check_call(['cockroach', 'cert', 'create-node', '--certs-dir', cr.node_certs_dir, '--ca-key', cr.ca_certs_dir+'/ca.key', 'localhost'] + node_addrs() + ['127.0.0.1', 'cockroachdb-public', 'cockroachdb-public.default',
+                'cockroachdb-public.'+cr.namespace, 'cockroachdb-public.%s.svc.cluster.local' % (cr.namespace), '*.cockroachdb', '*.cockroachdb.'+cr.namespace, 'cockroachdb.'+cr.namespace, '*.cockroachdb.%s.svc.cluster.local' % (cr.namespace)])
